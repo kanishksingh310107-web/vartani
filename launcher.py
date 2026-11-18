@@ -36,7 +36,7 @@ def bundle_root() -> Path:
 
 def resolve_profile_paths(environment=None, frozen=None, script_root=None) -> ProfilePaths:
     env = os.environ if environment is None else environment
-    packaged = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    packaged = (bool(getattr(sys, "frozen", False)) or env.get("VARTANI_PACKAGED") == "1") if frozen is None else frozen
     root = Path(script_root) if script_root is not None else Path(__file__).resolve().parent
     if env.get("VARTANI_HOME"):
         home = Path(env["VARTANI_HOME"]).expanduser()
@@ -163,7 +163,7 @@ class VartaniLauncher:
         ttk.Label(frame, textvariable=self.url_text, foreground="#7256d8").pack(anchor="w", pady=(12, 0))
         self.log_hint = tk.StringVar(value="Setup log: created after startup")
         ttk.Label(frame, textvariable=self.log_hint, wraplength=500, foreground="#666666").pack(anchor="w", pady=(8, 0))
-        self.root.after(150, self._drain_events)
+        self.drain_timer = self.root.after(150, self._drain_events)
 
     def _log(self, message: str) -> None:
         try:
@@ -290,7 +290,7 @@ class VartaniLauncher:
                     self.status.set(value)
         except queue.Empty:
             pass
-        self.root.after(150, self._drain_events)
+        self.drain_timer = self.root.after(150, self._drain_events)
 
     def open_app(self):
         if self.url:
@@ -301,6 +301,7 @@ class VartaniLauncher:
 
     def close(self):
         self.closing = True
+        self.root.after_cancel(self.drain_timer)
         if self.server is not None:
             self.server.should_exit = True
         self.root.destroy()
@@ -325,6 +326,7 @@ def packaged_smoke_test(log_path: Path) -> int:
             ensure_profile(resolve_profile_paths(frozen=True, script_root=Path(temp)))
             log("Importing the app…")
             from vartani.app import app, get_models, health, samples
+            from vartani.optional_setup import status
             log("Checking the app handlers and bundled pages…")
             if not health().get("version"):
                 raise SetupError("The packaged health handler did not return the app version.")
@@ -333,11 +335,15 @@ def packaged_smoke_test(log_path: Path) -> int:
             if not any(p.get("preset") == "groq" for p in get_models()["presets"]):
                 raise SetupError("The packaged model preset handler did not include the Groq preset.")
             paths = {getattr(route, "path", "") for route in app.routes}
-            if not {"/api/health", "/api/samples", "/api/models"} <= paths:
+            if not {"/api/health", "/api/samples", "/api/models", "/api/setup/{component}"} <= paths:
                 raise SetupError("The packaged app is missing a required API route.")
+            if not Path(sys.executable).with_name("python.exe").is_file():
+                raise SetupError("The package is missing its optional setup interpreter.")
+            if any(status(component)["installed"] for component in ("speech", "local-model")):
+                raise SetupError("The core Windows package unexpectedly contains optional dependencies.")
             for relative, expected in (("web/index.html", "Vartani"),
                                        ("web/speech.html", "Speech-to-text robustness"),
-                                       ("web/speech.js", "transcribe")):
+                                       ("web/speech.js", "/setup/speech")):
                 log(f"Checking {relative}…")
                 asset = bundle_root() / relative
                 if not asset.is_file() or expected not in asset.read_text(encoding="utf-8"):

@@ -1,86 +1,84 @@
+param([string]$RuntimeArchive)
+
 $ErrorActionPreference = 'Stop'
-
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$InputFile = Join-Path $Root 'requirements-windows.in'
-$LockFile = Join-Path $Root 'requirements-windows.lock'
-$VenvDir = Join-Path $PSScriptRoot '.build-venv'
+$Artifacts = Join-Path $Root 'artifacts'
 $BuildId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$ArtifactName = "Vartani-Windows-x64-$BuildId"
-$ArtifactsDir = Join-Path $Root 'artifacts'
-$ArtifactDir = Join-Path $ArtifactsDir $ArtifactName
-$WorkDir = Join-Path $PSScriptRoot ".work-$BuildId"
+$Stage = Join-Path $Artifacts "Vartani-Windows-x64-$BuildId"
+$Bundle = Join-Path $Stage 'Vartani'
+$App = Join-Path $Bundle 'app'
+$BuildLock = Join-Path $Root 'requirements-windows.lock'
+$Hash = '0DC3A404D4D6501F3B8F99D58354410A0B1699DD5C21070778A594DB02070DD3'
+$RuntimeUrl = 'https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-x86_64-pc-windows-msvc-install_only.tar.gz'
+$Compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 
-if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-    throw 'The Windows artifact must be built on Windows.'
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not (Test-Path -LiteralPath $Compiler)) {
+    throw 'Build on 64-bit Windows with the .NET Framework C# compiler available.'
 }
-$PythonExe = $null
-$PythonPrefix = @()
-if (Get-Command py -ErrorAction SilentlyContinue) {
-    $VersionCheck = & py -3.11 -c "import platform,sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{platform.architecture()[0]}')" 2>$null
-    if ($LASTEXITCODE -eq 0 -and $VersionCheck -eq '3.11.64bit') {
-        $PythonExe = 'py'
-        $PythonPrefix = @('-3.11')
-    }
+if (-not (Test-Path -LiteralPath (Join-Path $Root 'frontend\node_modules\vite\bin\vite.js'))) {
+    throw 'Install the frontend build dependencies first with npm ci in the frontend folder.'
 }
-if (-not $PythonExe) {
-    $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if ($PythonCommand) {
-        $VersionCheck = & $PythonCommand.Source -c "import platform,sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{platform.architecture()[0]}')" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $VersionCheck -eq '3.11.64bit') { $PythonExe = $PythonCommand.Source }
-    }
-}
-if (-not $PythonExe) {
-    throw "Python 3.11 x64 is required on the build machine; found '$VersionCheck'. Install it from python.org, then rerun this script."
-}
+if ($RuntimeArchive) { $RuntimeArchive = (Resolve-Path -LiteralPath $RuntimeArchive).Path }
+New-Item -ItemType Directory -Path $Artifacts -Force | Out-Null
+New-Item -ItemType Directory -Path $Stage | Out-Null
+New-Item -ItemType Directory -Path $App -Force | Out-Null
 
-if (-not (Test-Path $LockFile)) {
-    throw "Missing $LockFile. See docs/windows-build.md for how to generate the tested dependency lock."
-}
-if (Test-Path $VenvDir) {
-    $BuildPython = Join-Path $VenvDir 'Scripts\python.exe'
-} else {
-    Write-Progress -Activity 'Preparing Windows build' -Status 'Creating isolated build environment' -PercentComplete 10
-    & $PythonExe @PythonPrefix -m venv $VenvDir
-    if ($LASTEXITCODE -ne 0) { throw 'Could not create the isolated build environment. Check disk space and retry.' }
-    $BuildPython = Join-Path $VenvDir 'Scripts\python.exe'
-}
-
-Write-Progress -Activity 'Preparing Windows build' -Status 'Installing locked build dependencies (internet required on the build machine)' -PercentComplete 25
-& $BuildPython -m pip install --disable-pip-version-check -r $LockFile
-if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed. Check the network, disk space, and the pip error above, then rerun; the build environment can be reused.' }
-& $BuildPython -m pip check
-if ($LASTEXITCODE -ne 0) { throw 'The locked build dependencies are inconsistent. Refresh requirements-windows.lock and retry.' }
-
-Write-Progress -Activity 'Preparing Windows build' -Status 'Running automated tests' -PercentComplete 45
-Push-Location $Root
+Write-Host 'Building the frontend...'
+Push-Location (Join-Path $Root 'frontend')
 try {
-    & $BuildPython -m pytest -q tests/test_core.py tests/test_windows_launcher.py
-    if ($LASTEXITCODE -ne 0) { throw 'Automated checks failed; no Windows artifact was created.' }
+    & npm.cmd run build
+    if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 } finally { Pop-Location }
 
-New-Item -ItemType Directory -Path $ArtifactsDir -Force | Out-Null
-if (Test-Path $ArtifactDir) { throw "Refusing to replace existing output folder $ArtifactDir" }
-New-Item -ItemType Directory -Path $ArtifactDir | Out-Null
-Write-Progress -Activity 'Preparing Windows build' -Status 'Bundling Vartani and its Python runtime' -PercentComplete 65
-& $BuildPython -m PyInstaller --clean --noconfirm --distpath $ArtifactDir --workpath $WorkDir (Join-Path $PSScriptRoot 'vartani.spec')
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed. Review its diagnostic above; retry with a fresh build timestamp. Output: $ArtifactDir" }
-
-$BundleDir = Join-Path $ArtifactDir 'Vartani'
-$Launcher = Join-Path $BundleDir 'Vartani.exe'
-if (-not (Test-Path $Launcher)) { throw "PyInstaller did not produce $Launcher" }
-$SmokeLog = Join-Path $ArtifactDir 'packaged-smoke.log'
-Write-Progress -Activity 'Preparing Windows build' -Status 'Checking the packaged app and bundled resources' -PercentComplete 85
-$Smoke = Start-Process -FilePath $Launcher -ArgumentList @('--smoke-test', ('"{0}"' -f $SmokeLog)) -PassThru -Wait
-if ($Smoke.ExitCode -ne 0) {
-    $Details = if (Test-Path $SmokeLog) { Get-Content $SmokeLog -Raw } else { 'No smoke-test details were written.' }
-    throw "Packaged artifact smoke check failed: $Details"
+if (-not $RuntimeArchive) {
+    $RuntimeArchive = Join-Path $Stage 'python-runtime.tar.gz'
+    & curl.exe --fail --location --retry 2 --connect-timeout 15 --max-time 180 --output $RuntimeArchive $RuntimeUrl
+    if ($LASTEXITCODE -ne 0) { throw 'Python runtime download failed. Check your network and retry.' }
 }
-Remove-Item -LiteralPath $SmokeLog -Force -ErrorAction SilentlyContinue
+if ((Get-FileHash -LiteralPath $RuntimeArchive -Algorithm SHA256).Hash -ne $Hash) {
+    throw 'The Python runtime archive does not match its pinned SHA-256 checksum.'
+}
+& tar.exe '-xzf' $RuntimeArchive '--exclude=*.pdb' '-C' $Bundle
+if ($LASTEXITCODE -ne 0) { throw 'Could not extract the Python runtime. Free disk space and retry.' }
+$Python = Join-Path $Bundle 'python\python.exe'
 
-$ZipPath = Join-Path $ArtifactsDir "$ArtifactName.zip"
-if (Test-Path $ZipPath) { throw "Refusing to replace existing artifact $ZipPath" }
-Write-Progress -Activity 'Preparing Windows build' -Status 'Creating the distributable ZIP' -PercentComplete 95
-Compress-Archive -Path $BundleDir -DestinationPath $ZipPath -CompressionLevel Optimal
-Write-Progress -Activity 'Preparing Windows build' -Completed
+Write-Host 'Installing locked core dependencies and running the test suite...'
+& $Python -m venv (Join-Path $Stage 'test-venv')
+if ($LASTEXITCODE -ne 0) { throw 'Could not create the test environment.' }
+$TestPython = Join-Path $Stage 'test-venv\Scripts\python.exe'
+& $TestPython -m pip install --no-input --disable-pip-version-check --only-binary=:all: -r $BuildLock
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed. Check your network and free disk space, then retry.' }
+Push-Location $Root
+try {
+    & $TestPython -B -m pytest -q -p no:cacheprovider tests
+    if ($LASTEXITCODE -ne 0) { throw 'Tests failed. The package was not published.' }
+} finally { Pop-Location }
+
+$CoreLock = Join-Path $Stage 'core.lock'
+Get-Content -LiteralPath $BuildLock |
+    Where-Object { $_ -notmatch '^(iniconfig|pluggy|pytest)==' } |
+    Set-Content -LiteralPath $CoreLock -Encoding ascii
+& $Python -m pip install --no-input --disable-pip-version-check --only-binary=:all: -r $CoreLock
+if ($LASTEXITCODE -ne 0) { throw 'Could not populate the portable Python runtime.' }
+& $Python -m pip check
+if ($LASTEXITCODE -ne 0) { throw 'The bundled core dependencies are inconsistent.' }
+foreach ($Name in @('launcher.py','README.md','requirements-speech.txt','requirements-local-models.txt','requirements-windows.lock','docs','web','vartani')) {
+    Copy-Item -LiteralPath (Join-Path $Root $Name) -Destination $App -Recurse
+}
+$Data = New-Item -ItemType Directory -Path (Join-Path $App 'data')
+foreach ($Name in @('starter','paper')) {
+    Copy-Item -LiteralPath (Join-Path $Root "data\$Name") -Destination $Data.FullName -Recurse
+}
+
+$Launcher = Join-Path $Bundle 'Vartani.exe'
+& $Compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll "/out:$Launcher" (Join-Path $PSScriptRoot 'Vartani.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Could not compile Vartani.exe.' }
+$SmokeLog = Join-Path $Stage 'packaged-smoke.log'
+$Smoke = Start-Process -FilePath $Launcher -ArgumentList @('--smoke-test', ('"{0}"' -f $SmokeLog)) -WindowStyle Hidden -PassThru -Wait
+if (Test-Path -LiteralPath $SmokeLog) { Get-Content -LiteralPath $SmokeLog }
+if ($Smoke.ExitCode -ne 0) { throw 'The packaged smoke test failed.' }
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$ZipPath = "$Stage.zip"
+[IO.Compression.ZipFile]::CreateFromDirectory($Bundle, $ZipPath, [IO.Compression.CompressionLevel]::Optimal, $true)
 Write-Host "Windows package created: $ZipPath"
-Write-Host 'The package contains Vartani.exe plus its bundled runtime. End users do not need Python.'

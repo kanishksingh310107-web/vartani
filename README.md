@@ -20,6 +20,8 @@ your dataset and is reported as an association, not proof that one spelling rule
 
 ## Run it
 
+On 64-bit Windows, extract the packaged ZIP and double-click **Vartani.exe**. It includes Python and the core app. See [Windows setup and build instructions](docs/windows-build.md) for profile migration and troubleshooting.
+
 ```
 python main.py
 ```
@@ -32,11 +34,11 @@ Models (nothing is simulated — there is no demo mode):
 | Ollama / LM Studio / vLLM / OpenAI / Groq / any `/chat/completions` server | just the address (+ key if hosted) |
 | Hugging Face local (Qwen3-4B, Gemma-3-4B, Qwen2.5-3B) — same logit scoring as the paper | `pip install -r requirements-local-models.txt`, GPU or ~16 GB RAM |
 
-**Speech-to-text robustness (optional):** open **Speech check** in the top navigation, choose a starter question, record or upload a short clip of the question, and review the local Whisper transcript. From the Vartani folder install once with `\.venv\Scripts\python.exe -m pip install -r requirements-speech.txt`. The first transcription downloads the chosen Whisper model; later transcriptions run locally. Vartani compares the typed Roman baseline with the raw transcript and a native-to-Roman ITRANS version. Audio is deleted after transcription; only the reviewed text is stored in the run.
+**Speech-to-text robustness (optional):** open **Speech check**, select **Install speech support**, then choose a starter question and record or upload a short clip. First transcription downloads the chosen Whisper model. Later transcriptions reuse the cached model. Vartani compares the typed Roman baseline with the raw transcript and a native-to-Roman ITRANS version. Audio is deleted after transcription. Only the reviewed text is stored in the run.
 
 **Windows users:** a bundled launcher build (no user-side Python installation) can be created with the steps in [`docs/windows-build.md`](docs/windows-build.md). It stores models, settings, logs, and runs in `%LOCALAPPDATA%\Vartani`, outside the extracted app folder.
 
-To add your own model, open the **Test lab** and choose **Add my Hugging Face model (runs locally)** for a Transformers model ID or downloaded model folder. Choose **Add my API-compatible model** for an endpoint. GGUF files need a model server; Vartani does not load GGUF directly.
+To add your own model, open the **Test lab** and choose **Add my Hugging Face model (runs locally)** for a compatible Transformers model ID or downloaded model folder. Select **Install local model support** if needed. Testing downloads missing model weights and reuses cached files. Choose **Add my API-compatible model** for a hosted or local server. GGUF files require a separate model server.
 
 Gated Hugging Face models such as Gemma need access approved on the model page. From this project folder, authenticate once with `.\.venv\Scripts\hf.exe auth login`, then select and test the model again. A saved model is selectable for runs only after its connection test succeeds. **Run test** also needs a loaded question set: click a starter set or upload a CSV / JSONL file in step 1.
 

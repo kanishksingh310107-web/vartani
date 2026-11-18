@@ -6,11 +6,12 @@ import uuid
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, datasets, evidence as ev, export, models, runner, suites
+from . import __version__, datasets, evidence as ev, export, models, optional_setup, runner, suites
+from .security import redact_message
 from .analysis import report
 from .backends import BackendError, PROBE, make_backend, torch_status
 from .config import BUNDLE_DATA_DIR, DATA_DIR, WEB_DIR
@@ -19,6 +20,7 @@ from .scripts import LANG_INFO, bridge, script_of
 from .speech import SpeechError, transcribe
 
 app = FastAPI(title="Vartani", version=__version__)
+optional_setup.activate_installed()
 
 
 @app.post("/api/speech/transcribe")
@@ -53,6 +55,29 @@ def health():
     return {"version": __version__, "torch": torch_status(), "langs": {k: v["name"] for k, v in LANG_INFO.items()},
             "rules": {k: v[0] for k, v in RULES.items()}, "defaults": default_config(),
             "paper_data": bool(list((BUNDLE_DATA_DIR / "paper").glob("*.jsonl")))}
+
+
+@app.get("/api/setup/{component}")
+def optional_status(component: str):
+    if component not in optional_setup.COMPONENTS:
+        raise HTTPException(404, "Unknown optional component")
+    return optional_setup.status(component)
+
+
+@app.post("/api/setup/{component}")
+def optional_install(component: str, request: Request):
+    origin = request.headers.get("origin")
+    if (
+        request.url.hostname not in {"localhost", "127.0.0.1", "::1"}
+        or not request.client
+        or request.client.host not in {"127.0.0.1", "::1"}
+        or request.headers.get("x-vartani-setup") != "1"
+        or (origin and origin != f"{request.url.scheme}://{request.url.netloc}")
+    ):
+        raise HTTPException(403, "Start optional setup from your local Vartani page.")
+    if component not in optional_setup.COMPONENTS:
+        raise HTTPException(404, "Unknown optional component")
+    return optional_setup.start(component)
 
 
 # ---- data --------------------------------------------------------------------------------------------------
@@ -137,18 +162,21 @@ def del_model(mid: str):
 
 @app.post("/api/models/test")
 def test_model(body: dict = Body(...)):
-    cfg = models.get_model(body["id"]) if body.get("id") else body
+    try:
+        cfg = models.get_model(body["id"]) if body.get("id") else body
+    except KeyError:
+        raise HTTPException(404, "No such saved model")
     if body.get("id") and not cfg.get("api_key") and body.get("api_key"):
         cfg = {**cfg, "api_key": body["api_key"]}
     try:
         a = make_backend(cfg).answer(PROBE)
     except BackendError as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": redact_message(str(e), cfg)}
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        return {"ok": False, "error": redact_message(f"{type(e).__name__}: {e}", cfg)}
     return {"ok": a.letter is not None, "letter": a.letter, "correct": a.letter == "B", "ms": a.ms,
             "margin_available": a.margin is not None,
-            "error": None if a.letter else f"The model replied {a.raw!r}, which has no A–D letter."}
+            "error": None if a.letter else redact_message(f"The model replied {a.raw!r}, which has no A–D letter.", cfg)}
 
 
 # ---- runs --------------------------------------------------------------------------------------------------
@@ -261,5 +289,7 @@ if WEB_DIR.is_dir() and (WEB_DIR / "index.html").exists():
 
     @app.get("/{path:path}")
     def spa(path: str):
-        f = WEB_DIR / path
-        return FileResponse(f if path and f.is_file() else WEB_DIR / "index.html")
+        f = (WEB_DIR / path).resolve()
+        if f.is_relative_to(WEB_DIR.resolve()) and f.is_file():
+            return FileResponse(f)
+        return FileResponse(WEB_DIR / "index.html")

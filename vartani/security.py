@@ -9,6 +9,15 @@ _SECRET_NAMES = {
 _SECRET_SUFFIXES = ("_api_key", "_key", "_token", "_password", "_secret", "_credential")
 
 
+def redact_message(message: str, model: dict) -> str:
+    """Remove credential values echoed in provider responses and exceptions."""
+    for name in ("api_key", "hf_token"):
+        value = model.get(name)
+        if isinstance(value, str) and value:
+            message = message.replace(value, "[redacted]")
+    return message
+
+
 def redact_secrets(value):
     """Return a recursively copied value with secret-bearing fields removed."""
     if isinstance(value, dict):

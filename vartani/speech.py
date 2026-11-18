@@ -26,7 +26,7 @@ def transcribe(path: Path, lang: str, model_size: str = "base") -> dict:
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:
-        raise SpeechError("Speech support is optional. From the Vartani folder run: .\\.venv\\Scripts\\python.exe -m pip install -r requirements-speech.txt") from e
+        raise SpeechError("Open Speech check and select Install speech support before transcribing.") from e
 
     with _lock:
         model = _models.get(model_size)

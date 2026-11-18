@@ -23,7 +23,8 @@
         <div class="speech-grid"><label>Whisper size<select id="speech-size"><option value="tiny">Tiny (fastest, lower accuracy)</option><option value="base" selected>Base (recommended)</option><option value="small">Small (slower, better recognition)</option></select></label>
         <label>Upload audio<input id="speech-audio" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac" /></label></div>
         <div class="row gap wrap"><button id="speech-record" class="btn">Record with microphone (30 sec max)</button><button id="speech-stop-record" class="btn" hidden>Stop recording</button><span id="speech-record-status" class="muted"></span></div>
-        <p class="muted">First use downloads the selected Whisper model once. After that, transcription runs locally. Install optional support from the Vartani folder with <code>.\.venv\Scripts\python.exe -m pip install -r requirements-speech.txt</code>.</p>
+        <p class="muted">Speech support is optional. Installation needs internet and disk space; package size varies. Whisper weights download separately on first transcription: tiny about 75 MB, base about 145 MB, small about 500 MB (approximate). Cached models are reused.</p>
+        <button id="speech-setup" class="btn">Install speech support</button><p id="speech-setup-status" role="status" class="muted">Checking speech support…</p>
         <button id="speech-transcribe" class="btn primary" disabled>Transcribe audio</button><p id="speech-transcribe-status" class="muted"></p>
         <label>Review or correct the transcript<textarea id="speech-transcript" rows="3" placeholder="Transcription appears here; you can edit it before running." disabled></textarea></label>
       </section>

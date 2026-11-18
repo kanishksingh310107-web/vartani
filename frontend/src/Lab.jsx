@@ -76,6 +76,19 @@ function ModelPicker({ modelId, setModelId }) {
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState(false);
   const [checkingId, setCheckingId] = useState(null);
+  const [setup, setSetup] = useState(null);
+  useEffect(() => {
+    if (form?.kind !== "hf") return;
+    let timer;
+    const check = () => api("/setup/local-model").then(s => { setSetup(s); if (s.state === "running") timer = setTimeout(check, 2000); }).catch(e => setSetup({state:"failed", message:e.message}));
+    check(); return () => clearTimeout(timer);
+  }, [form?.kind]);
+  const installSupport = async () => {
+    try {
+      let s = await api("/setup/local-model", {method:"POST", headers: {"X-Vartani-Setup": "1"}}); setSetup(s);
+      while (s.state === "running") { await new Promise(r => setTimeout(r, 2000)); s = await api("/setup/local-model"); setSetup(s); }
+    } catch(e) { setSetup({state:"failed", message:e.message}); }
+  };
   const refresh = () => api("/models").then(setData);
   useEffect(() => { refresh(); }, []);
   const pick = (p) => { setTest(null); setForm({ ...p, api_key: "" }); };
@@ -110,6 +123,7 @@ function ModelPicker({ modelId, setModelId }) {
   return (
     <section className="card">
       <h3><span className="num">2</span> Model to test</h3>
+      <p className="muted">Online services need internet and may charge for usage. Local models need storage and memory; local servers such as Ollama are installed separately.</p>
       {data.saved.length > 0 && (
         <div className="saved">
           {data.saved.map((m) => (
@@ -133,10 +147,13 @@ function ModelPicker({ modelId, setModelId }) {
           <label>Name<input value={form.label || ""} onChange={f("label")} /></label>
           {form.kind === "hf" ? (
             <>
+              <p className="muted">Optional local support requires PyTorch and Transformers and may need several GB. Model weights are separate: 4B presets are about 8 GB. Custom sizes vary; check the model page. GGUF requires a separate model server.</p>
+              <p role="status">{setup?.installed ? "Local support installed." : (setup?.message || "Checking local support…")}</p>
+              {!setup?.installed && <button className="btn" disabled={!setup || setup.state === "running"} onClick={installSupport}>{setup?.state === "running" ? "Installing support…" : setup?.state === "failed" ? "Retry setup" : "Install local model support"}</button>}
               <label>Hugging Face model ID or local folder path<input value={form.hf_id || ""} onChange={f("hf_id")} placeholder="Qwen/Qwen3-4B or C:\\Models\\my-finetune" /></label>
               <label>Hugging Face read token (only for private or gated models)<input type="password" value={form.hf_token || ""} onChange={f("hf_token")} placeholder={form.has_hf_token ? "saved — leave blank to keep" : "hf_…"} autoComplete="new-password" /></label>
               <label>Run on<select value={form.device || ""} onChange={f("device")}><option value="">Auto detect</option><option value="cpu">CPU</option><option value="cuda">NVIDIA CUDA GPU</option></select></label>
-              <small>For local Transformers models. Missing weights download on first use. For gated models, accept the terms and wait for approval, then enter a Hugging Face read token. GGUF files need a model server such as Ollama or LM Studio.</small>
+              <small>For local Transformers models. Testing downloads missing weights; cached weights are reused. For gated models, accept the terms and wait for approval, then enter a Hugging Face read token. GGUF files need a model server.</small>
             </>
           ) : (
             <>
@@ -147,7 +164,7 @@ function ModelPicker({ modelId, setModelId }) {
           )}
           {form.hint && <p className="muted">{form.hint}</p>}
           <div className="row gap">
-            <button className="btn primary" disabled={busy} onClick={doTest}>{busy ? "Testing…" : "Save and test connection"}</button>
+            <button className="btn primary" disabled={busy || (form.kind === "hf" && !setup?.installed)} onClick={doTest}>{busy ? "Testing… first use may take a few minutes" : form.kind === "hf" ? "Save and test local model" : "Save and test connection"}</button>
             <button className="btn" onClick={() => { setForm(null); setTest(null); }}>Close</button>
           </div>
           {test && (test.ok

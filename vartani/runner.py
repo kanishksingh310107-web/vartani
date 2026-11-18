@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from .backends import BackendError, make_backend
 from .config import DATA_DIR, WORKERS
 from .perturb import build_conditions, count_calls
-from .security import redact_secrets
+from .security import redact_message, redact_secrets
 
 RUNS = DATA_DIR / "runs"
 _jobs: Dict[str, dict] = {}
@@ -26,15 +26,15 @@ def _dir(rid: str):
 
 def _save_meta(meta: dict):
     clean = redact_secrets(meta)
-    meta.clear()
-    meta.update(clean)
-    (_dir(meta["id"]) / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    (_dir(clean["id"]) / "meta.json").write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def _read_meta(path) -> dict:
     """Read metadata while migrating any secrets out of old local run files."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     clean = redact_secrets(raw)
+    if isinstance(clean.get("error"), str):
+        clean["error"] = redact_message(clean["error"], raw.get("model") or {})
     if clean != raw:
         path.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
     return clean
@@ -82,7 +82,7 @@ def create_run(name: str, items: List[dict], model: dict, cfg: dict) -> dict:
     rid = uuid.uuid4().hex[:10]
     _dir(rid).mkdir(parents=True, exist_ok=True)
     (_dir(rid) / "items.json").write_text(json.dumps(prepared, ensure_ascii=False), encoding="utf-8")
-    meta = {"id": rid, "name": name, "created": time.time(), "status": "queued", "model": {k: v for k, v in model.items() if k != "api_key"},
+    meta = {"id": rid, "name": name, "created": time.time(), "status": "queued", "model": redact_secrets(model),
             "model_label": model.get("label") or model.get("model") or model.get("hf_id"), "config": cfg, "n_items": len(items),
             "total_calls": count_calls(prepared), "done_calls": 0, "done_items": 0, "error": None, "kind": "run"}
     _save_meta(meta)
@@ -168,9 +168,9 @@ def _execute(rid: str, model: dict):
             list(ex.map(work, todo))
         meta["status"] = "cancelled" if stop.is_set() else "done"
     except BackendError as e:
-        meta.update(status="failed", error=str(e))
+        meta.update(status="failed", error=redact_message(str(e), model))
     except Exception as e:  # noqa: BLE001  - surface anything to the UI instead of dying silently
-        meta.update(status="failed", error=f"{type(e).__name__}: {e}")
+        meta.update(status="failed", error=redact_message(f"{type(e).__name__}: {e}", model))
     finally:
         try:
             out.close()

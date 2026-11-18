@@ -3,6 +3,7 @@
   const els = {set:$("speech-set"), question:$("speech-question"), preview:$("speech-question-preview"), size:$("speech-size"), audio:$("speech-audio"), transcribe:$("speech-transcribe"), transcribeStatus:$("speech-transcribe-status"), transcript:$("speech-transcript"), model:$("speech-model"), testModel:$("speech-test-model"), modelStatus:$("speech-model-status"), runName:$("speech-run-name"), run:$("speech-run"), runStatus:$("speech-run-status"), output:$("speech-output")};
   let items = [], models = [], modelPassed = false, activeRun = null, pollTimer = null;
   let currentAudio = null, recorder = null, micStream = null, audioChunks = [], recordTimer = null;
+  let speechInstalled = false, transcribing = false;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   async function api(path, options={}) {
     const r = await fetch("/api"+path, options);
@@ -12,7 +13,7 @@
   }
   const selectedItem = () => items.find((x) => String(x.id) === els.question.value);
   function refreshButtons() {
-    els.transcribe.disabled = !(selectedItem() && currentAudio);
+    els.transcribe.disabled = !(selectedItem() && currentAudio && speechInstalled) || transcribing;
     els.testModel.disabled = !els.model.value;
     els.run.disabled = !(selectedItem() && els.transcript.value.trim() && modelPassed) || Boolean(activeRun && ["queued","running"].includes(activeRun.status));
   }
@@ -64,7 +65,7 @@
   els.transcribe.addEventListener("click",async()=>{
     const file=currentAudio, item=selectedItem(); if(!file||!item)return;
     if(file.size>25*1024*1024){els.transcribeStatus.textContent="Audio must be under 25 MB.";return;}
-    els.transcribe.disabled=true; els.transcribe.textContent="Downloading model if needed, then transcribing…";
+    transcribing=true; refreshButtons(); els.transcribe.textContent="Downloading model if needed, then transcribing…";
     els.transcribeStatus.textContent="This runs locally. First use downloads Whisper model weights and can take a few minutes.";
     try {
       const form=new FormData(); form.append("file",file); form.append("lang",item.lang); form.append("model_size",els.size.value);
@@ -72,7 +73,7 @@
       els.transcript.value=result.text; els.transcript.disabled=false;
       els.transcribeStatus.textContent=`${result.model} · ${result.duration}s audio · language ${result.language}. Review the transcript before running.`;
     } catch(e) { els.transcribeStatus.textContent=e.message; }
-    finally { els.transcribe.textContent="Transcribe audio"; refreshButtons(); }
+    finally { transcribing=false; els.transcribe.textContent="Transcribe audio"; refreshButtons(); }
   });
   els.testModel.addEventListener("click",async()=>{
     if(!els.model.value)return; modelPassed=false; els.testModel.disabled=true; els.testModel.textContent="Testing…"; els.modelStatus.textContent="Checking the saved connection…";
@@ -112,5 +113,25 @@
       poll();
     } catch(e){els.runStatus.textContent=e.message;els.run.textContent="Run speech check";refreshButtons();}
   });
-  loadSets(); loadModels(); refreshButtons();
+  async function checkSpeechSetup() {
+    try {
+      const s=await api("/setup/speech");
+      speechInstalled=s.installed;
+      refreshButtons();
+      $("speech-setup-status").textContent=s.installed?"Speech support installed.":s.message;
+      $("speech-setup").disabled=s.installed||s.state==="running";
+      $("speech-setup").textContent=s.installed?"Speech support installed":s.state==="running"?"Installing…":s.state==="failed"?"Retry speech setup":"Install speech support";
+      if(s.state==="running")setTimeout(checkSpeechSetup,2000);
+    } catch(e){$("speech-setup-status").textContent=e.message;}
+  }
+  $("speech-setup").addEventListener("click",async()=>{
+    const button=$("speech-setup"), status=$("speech-setup-status");
+    button.disabled=true;
+    try {
+      const job=await api("/setup/speech",{method:"POST",headers:{"X-Vartani-Setup":"1"}});
+      if(job.state==="failed"){status.textContent=job.message;button.disabled=false;return;}
+      await checkSpeechSetup();
+    } catch(e){status.textContent=e.message;button.disabled=false;}
+  });
+  checkSpeechSetup(); loadSets(); loadModels(); refreshButtons();
 })();

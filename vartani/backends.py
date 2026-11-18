@@ -178,7 +178,7 @@ class HFLocal:
                 import torch
                 from transformers import AutoModelForCausalLM, AutoTokenizer
             except ImportError as e:
-                raise BackendError("Local models need PyTorch and Transformers. Run: pip install -r requirements-local-models.txt") from e
+                raise BackendError("Local models need PyTorch and Transformers. Open the model settings in Test lab and select Install local model support.") from e
             dev = self.device_pref or ("cuda" if torch.cuda.is_available() else "cpu")
             dtype = (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16) if dev == "cuda" else torch.float32
             stale = [key for key in HFLocal._cache if key != self.hf_id]

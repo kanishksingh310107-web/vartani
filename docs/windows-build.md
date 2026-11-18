@@ -4,13 +4,16 @@ Vartani now has a Windows-first, per-user launcher package. The package bundles 
 
 ## Build the Windows package
 
-Build on 64-bit Windows with Python 3.11 installed on the **build machine**. Open PowerShell in the repository and run:
+Build on 64-bit Windows with Node.js, npm, and the Windows .NET Framework C# compiler. Open PowerShell in the repository and run:
 
 ```powershell
+Push-Location frontend
+npm ci
+Pop-Location
 .\build\windows\build.ps1
 ```
 
-The script creates an isolated build environment, installs the exact versions in `requirements-windows.lock`, runs the core and launcher checks, builds the PyInstaller one-folder app, starts the packaged executable in smoke-test mode, and creates a timestamped ZIP in `artifacts\`. It refuses to overwrite an existing artifact. A failed pip/build step can be retried by running the same script again; the build environment is reused and completed user data is never touched.
+The script rebuilds the frontend, downloads and verifies a pinned portable Python archive, installs the versions in `requirements-windows.lock`, runs the tests, and checks the packaged executable before creating a timestamped ZIP in `artifacts\`. If the archive has already been downloaded, pass its path as `-RuntimeArchive`. Each retry uses a fresh build folder.
 
 Building requires internet access to install the locked Python build dependencies. The generated app itself does not download Python or its core dependencies.
 
@@ -30,8 +33,10 @@ The launcher shows actionable messages for missing package files, unwritable/ful
 - **Core installation and startup:** no internet connection required.
 - **Hosted models** such as Groq or OpenAI: Vartani needs internet access when testing or running them, plus a user-provided API key.
 - **Local model servers** such as Ollama/LM Studio: the server must be installed and running separately. Vartani does not install or download those models.
-- **Hugging Face local models:** PyTorch/Transformers are not bundled. Install them only if wanted, using the instructions in the Test lab. Model weights download only when the user selects and tests a model.
-- **Speech check:** Whisper/faster-whisper is not bundled. The user can opt in from the Speech check instructions; the chosen speech model downloads on first transcription.
+- **Hugging Face local models:** select **Install local model support** in Test lab. The runtime packages and model weights are separate downloads. Testing the model downloads weights that are missing from its cache. Gated models require Hugging Face approval and a read token.
+- **Speech check:** select **Install speech support**. The chosen Whisper model downloads on first transcription. Later transcriptions reuse the cache.
+
+Optional packages live in `%LOCALAPPDATA%\Vartani\optional` (or the configured `VARTANI_HOME`). They are reused on later launches with the same bundled Python version. If installation fails, check connectivity and free disk space, then use the retry button. Hosted model connections need no optional packages.
 
 The standard Windows package intentionally excludes PyTorch, Transformers, Faster Whisper, and CTranslate2 to keep setup smaller and avoid downloading optional model weights automatically.
 
@@ -46,4 +51,4 @@ The standard Windows package intentionally excludes PyTorch, Transformers, Faste
 
 ## Packaged artifact checks
 
-The build script tests profile-path selection, retry-safe setup, non-overwriting data import, missing-bundle errors, port-conflict behavior, core statistics, and bundled evidence. It then invokes the produced `Vartani.exe --smoke-test <log-file>` to verify frozen imports, API route handlers, bundled starter/evidence data, main UI, and speech page. This offline smoke check does not make hosted model calls. Actual server/browser startup, microphone input, Windows SmartScreen/signing, low-disk behavior, and upgrades should still be checked on a clean Windows machine.
+The build runs the complete test suite, then invokes `Vartani.exe --smoke-test <log-file>` to verify packaged imports, the setup API, starter data, and web assets. On a clean Windows machine, extract the ZIP and launch twice. Check that the browser opens both times, saved settings persist, and hosted model use does not install optional packages. Then install either optional feature, restart Vartani, and check that its status still shows installed.
