@@ -124,6 +124,11 @@ def _choose_port(host: str, preferred: int, explicit: bool) -> int:
         raise SetupError(f"Vartani could not find an available local network port. Close other local servers and retry. Details: {e}") from e
 
 
+def _server_config(app, host: str, port: int):
+    import uvicorn
+    return uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False, http="h11", ws="none")
+
+
 class VartaniLauncher:
     def __init__(self):
         import tkinter as tk
@@ -222,7 +227,7 @@ class VartaniLauncher:
             from vartani.app import app
             if getattr(self, "closing", False):
                 return
-            server_config = uvicorn.Config(app, host=config.HOST, port=port, log_level="warning", access_log=False, http="h11", ws="none")
+            server_config = _server_config(app, config.HOST, port)
             self.server = uvicorn.Server(server_config)
             self.server.install_signal_handlers = lambda: None
             self.server_thread = threading.Thread(target=self.server.run, name="VartaniServer", daemon=True)
@@ -327,6 +332,7 @@ def packaged_smoke_test(log_path: Path) -> int:
             log("Importing the app…")
             from vartani.app import app, get_models, health, samples
             from vartani.optional_setup import status
+            _server_config(app, "127.0.0.1", 8000)
             log("Checking the app handlers and bundled pages…")
             if not health().get("version"):
                 raise SetupError("The packaged health handler did not return the app version.")
@@ -361,6 +367,12 @@ def packaged_smoke_test(log_path: Path) -> int:
 
 
 def main():
+    # Explorer launches pythonw.exe without a console. Uvicorn and model
+    # libraries still expect stdout and stderr to be writable streams.
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
     if len(sys.argv) >= 3 and sys.argv[1] == "--smoke-test":
         raise SystemExit(packaged_smoke_test(Path(sys.argv[2])))
     try:

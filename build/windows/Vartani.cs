@@ -15,7 +15,7 @@ internal static class Vartani
             string entry = Path.Combine(app, "launcher.py");
             bool smokeTest = args.Length == 2 && args[0] == "--smoke-test";
             if (args.Length != 0 && !smokeTest) return 2;
-            string interpreter = Path.Combine(root, "python", smokeTest ? "python.exe" : "pythonw.exe");
+            string interpreter = Path.Combine(root, "python", "pythonw.exe");
             if (!File.Exists(entry) || !File.Exists(interpreter))
                 throw new IOException("Vartani's files are incomplete. Extract the complete ZIP into a new folder and try again.");
 
