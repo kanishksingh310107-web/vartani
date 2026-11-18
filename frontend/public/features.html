@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compare & ship · Vartani</title>
+  <link rel="stylesheet" href="/features.css" />
+</head>
+<body>
+  <main class="app feature-app">
+    <nav class="nav"><a class="brand" href="/"><span class="logo">व</span>Vartani</a><div class="links"><a href="/">Overview</a><a href="/#/lab">Test lab</a><a class="on" href="/features.html">Compare &amp; ship</a><a href="/#/runs">Runs</a></div></nav>
+    <header class="hero feature-hero">
+      <span class="eyebrow">Before you ship</span>
+      <h1>Test the same questions on every model you’re considering.</h1>
+      <p>Compare accuracy and spelling stability, apply your release limits, and see which writer-style spelling patterns move each model’s answers.</p>
+    </header>
+    <section class="card feature-intro">
+      <h3>Three upgrades for real model decisions</h3>
+      <div class="three">
+        <p><b>Side-by-side model comparison</b><br />Every selected model gets the same dataset and spelling conditions.</p>
+        <p><b>Release gate</b><br />Choose a minimum Roman accuracy and a maximum spelling flip rate.</p>
+        <p><b>Reusable benchmark suites</b><br />Save a test set and run it again when a model changes.</p>
+        <p><b>Spelling fingerprint</b><br />See writer-style patterns linked to harmful answer changes and recoveries.</p>
+      </div>
+    </section>
+    <section class="card feature-form">
+      <h3>1. Choose your questions</h3>
+      <div class="grid2">
+        <label>Load a starter set<select id="sample"><option value="">Choose an example set</option></select></label>
+        <label>Default language if the file has no language column<select id="default-lang"><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option></select></label>
+        <label>Or upload CSV / JSONL<input id="file" type="file" accept=".csv,.json,.jsonl" /></label>
+      </div>
+      <p id="dataset-state" class="muted">Choose a starter set or upload your test questions. The starter sets are examples, not large evaluation benchmarks.</p>
+    </section>
+    <section class="card feature-form">
+      <h3>Keep this test set for later</h3>
+      <div class="row gap wrap"><label class="suite-name">Suite name<input id="suite-name" value="My release benchmark" /></label><button id="save-suite" class="btn" disabled>Save reusable suite</button></div>
+      <div class="grid2"><label>Saved suites<select id="suite-select"><option value="">Choose a saved test set</option></select></label><div class="row gap wrap suite-actions"><button id="load-suite" class="btn" disabled>Load selected suite</button><button id="delete-suite" class="btn" disabled>Delete selected suite</button></div></div>
+      <p id="suite-state" class="muted">Saved suites stay on this computer and can be reused after you restart Vartani.</p>
+    </section>
+    <section class="card feature-form">
+      <h3>2. Select saved models</h3>
+      <p class="muted">Connect models in the Test lab first. API keys stay in Vartani’s local model settings.</p>
+      <div id="models" class="model-list"><p class="muted">Loading saved models…</p></div>
+    </section>
+    <section class="card feature-form">
+      <h3>3. Set your release limits</h3>
+      <div class="grid2 gate-fields">
+        <label>Minimum Roman accuracy (%)<input id="min-accuracy" type="number" min="0" max="100" value="60" /></label>
+        <label>Maximum single-respelling answer flips (%)<input id="max-flips" type="number" min="0" max="100" value="20" /></label>
+        <label>Minimum scored questions<input id="min-items" type="number" min="1" value="30" /></label>
+      </div>
+      <p class="muted">A model passes only if it meets these limits and has enough scored questions. The minimum sample rule prevents a six-question demo from looking like a release-grade result.</p>
+      <div class="row gap wrap"><button id="run" class="btn primary big" disabled>Compare selected models</button><span id="message" class="msg"></span></div>
+    </section>
+    <section id="results" class="card" hidden>
+      <h3>Comparison results</h3>
+      <p class="muted">Results refresh while model runs are in progress. Each row uses the same question set.</p>
+      <div id="results-body"></div>
+    </section>
+    <footer>Vartani measures how model answers respond to spelling changes. It does not certify answer correctness outside the supplied answer key.</footer>
+  </main>
+  <script src="/features.js"></script>
+</body>
+</html>

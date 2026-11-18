@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vartani · Speech-to-text check</title>
+  <link rel="stylesheet" href="/assets/index-Bc1-l0IO.css" />
+  <style>
+    .speech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.speech-result{white-space:pre-wrap;overflow-wrap:anywhere}.speech-progress{height:10px;background:var(--glass);border-radius:10px;overflow:hidden}.speech-progress i{display:block;height:100%;background:var(--violet);transition:width .3s}.speech-output{display:grid;gap:.6rem}.speech-output .card{margin:0}
+  </style>
+</head>
+<body>
+  <div class="glow"></div><div class="app">
+    <nav class="nav"><a class="brand" href="/#/"><span class="logo">व</span>Vartani</a><div class="links"><a href="/#/lab">Test lab</a><a href="/#/runs">Runs</a></div></nav>
+    <main class="page">
+      <header><span class="eyebrow">Optional experiment</span><h1 class="h1">Speech-to-text robustness</h1><p class="lead">Speak one question, transcribe it locally, and compare the model’s answer on the typed baseline, the raw transcript, and its Romanized form.</p></header>
+      <section class="card"><h3><span class="num">1</span> Choose a question</h3><div class="speech-grid">
+        <label>Starter set<select id="speech-set"><option value="">Loading sets…</option></select></label>
+        <label>Question<select id="speech-question" disabled><option>Choose a starter set</option></select></label>
+      </div><div id="speech-question-preview" class="feature-box muted">Choose a starter set and question.</div></section>
+      <section class="card"><h3><span class="num">2</span> Transcribe the spoken question</h3>
+        <p class="muted">Record only the question shown above. The passage and answer choices stay the same as the typed baseline. Audio is processed on this computer and deleted after transcription; the transcript is kept with the run if you start it.</p>
+        <div class="speech-grid"><label>Whisper size<select id="speech-size"><option value="tiny">Tiny (fastest, lower accuracy)</option><option value="base" selected>Base (recommended)</option><option value="small">Small (slower, better recognition)</option></select></label>
+        <label>Upload audio<input id="speech-audio" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac" /></label></div>
+        <div class="row gap wrap"><button id="speech-record" class="btn">Record with microphone (30 sec max)</button><button id="speech-stop-record" class="btn" hidden>Stop recording</button><span id="speech-record-status" class="muted"></span></div>
+        <p class="muted">First use downloads the selected Whisper model once. After that, transcription runs locally. Install optional support from the Vartani folder with <code>.\.venv\Scripts\python.exe -m pip install -r requirements-speech.txt</code>.</p>
+        <button id="speech-transcribe" class="btn primary" disabled>Transcribe audio</button><p id="speech-transcribe-status" class="muted"></p>
+        <label>Review or correct the transcript<textarea id="speech-transcript" rows="3" placeholder="Transcription appears here; you can edit it before running." disabled></textarea></label>
+      </section>
+      <section class="card"><h3><span class="num">3</span> Choose and verify a model</h3>
+        <div class="speech-grid"><label>Saved model<select id="speech-model"><option value="">Loading models…</option></select></label><div><button id="speech-test-model" class="btn" disabled>Test model connection</button><p id="speech-model-status" class="muted">Choose a saved model.</p></div></div>
+      </section>
+      <section class="card"><h3><span class="num">4</span> Run the comparison</h3><label>Run name<input id="speech-run-name" value="Speech transcription check" /></label>
+        <p class="muted">This runs one question with a few conditions, so it’s a feature demo, not a large accuracy study. ASR → Romanized uses Vartani’s ITRANS conversion when Whisper returns native script.</p>
+        <button id="speech-run" class="btn primary" disabled>Run speech check</button><div id="speech-run-status" class="muted"></div><div id="speech-output" class="speech-output"></div>
+      </section>
+    </main>
+    <footer>Vartani · Audio stays local during transcription; only the edited transcript is saved with a benchmark run.</footer>
+  </div><script src="/speech.js?v=1"></script>
+</body></html>

@@ -1,0 +1,4 @@
+# Only for the "Hugging Face, local" model option (same scoring as the paper).
+torch
+transformers>=4.51
+accelerate

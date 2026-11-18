@@ -1,0 +1,2 @@
+# Optional, only for the Speech-to-text check page.
+faster-whisper>=1.0,<2
