@@ -34,6 +34,8 @@ Models (nothing is simulated — there is no demo mode):
 
 **Speech-to-text robustness (optional):** open **Speech check** in the top navigation, choose a starter question, record or upload a short clip of the question, and review the local Whisper transcript. From the Vartani folder install once with `\.venv\Scripts\python.exe -m pip install -r requirements-speech.txt`. The first transcription downloads the chosen Whisper model; later transcriptions run locally. Vartani compares the typed Roman baseline with the raw transcript and a native-to-Roman ITRANS version. Audio is deleted after transcription; only the reviewed text is stored in the run.
 
+**Windows users:** a bundled launcher build (no user-side Python installation) can be created with the steps in [`docs/windows-build.md`](docs/windows-build.md). It stores models, settings, logs, and runs in `%LOCALAPPDATA%\Vartani`, outside the extracted app folder.
+
 To add your own model, open the **Test lab** and choose **Add my Hugging Face model (runs locally)** for a Transformers model ID or downloaded model folder. Choose **Add my API-compatible model** for an endpoint. GGUF files need a model server; Vartani does not load GGUF directly.
 
 Gated Hugging Face models such as Gemma need access approved on the model page. From this project folder, authenticate once with `.\.venv\Scripts\hf.exe auth login`, then select and test the model again. A saved model is selectable for runs only after its connection test succeeds. **Run test** also needs a loaded question set: click a starter set or upload a CSV / JSONL file in step 1.

@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .config import DATA_DIR, LANGS
+from .config import BUNDLE_DATA_DIR, LANGS
 from .scripts import script_of
 
 LANG_ALIASES = {"hi": "hi", "hin": "hi", "hindi": "hi", "hin_deva": "hi", "bn": "bn", "ben": "bn", "bengali": "bn",
@@ -106,14 +106,14 @@ def parse_dataset(text: str, filename: str = "", default_lang: Optional[str] = N
 
 def starter_sets() -> list:
     out = []
-    for p in sorted((DATA_DIR / "starter").glob("*.json")):
+    for p in sorted((BUNDLE_DATA_DIR / "starter").glob("*.json")):
         d = json.loads(p.read_text(encoding="utf-8"))
         out.append({"id": p.stem, "lang": d["lang"], "title": d["title"], "n": len(d["items"])})
     return out
 
 
 def load_starter(sid: str) -> dict:
-    p = DATA_DIR / "starter" / f"{Path(sid).name}.json"
+    p = BUNDLE_DATA_DIR / "starter" / f"{Path(sid).name}.json"
     d = json.loads(p.read_text(encoding="utf-8"))
     items = []
     for i, r in enumerate(d["items"]):

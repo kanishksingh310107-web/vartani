@@ -7,3 +7,6 @@ data/user/*
 !data/user/.gitkeep
 frontend/node_modules/
 .pytest_cache/
+build/windows/.build-venv/
+build/windows/.work-*/
+artifacts/

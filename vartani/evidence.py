@@ -7,14 +7,14 @@ from collections import Counter
 from functools import lru_cache
 
 from .analysis import COLAB_KEYS, report, pct
-from .config import DATA_DIR
+from .config import BUNDLE_DATA_DIR
 
 MODEL_LABEL = {"qwen2.5-3b": "Qwen2.5-3B-Instruct", "qwen3-4b": "Qwen3-4B", "gemma3-4b": "Gemma-3-4B-it"}
 
 
 def load_paper_rows() -> list:
     rows = []
-    for f in sorted(glob.glob(str(DATA_DIR / "paper" / "*.jsonl"))):
+    for f in sorted(glob.glob(str(BUNDLE_DATA_DIR / "paper" / "*.jsonl"))):
         for line in open(f, encoding="utf-8"):
             if line.strip():
                 d = json.loads(line)

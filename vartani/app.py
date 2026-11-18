@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__, datasets, evidence as ev, export, models, runner, suites
 from .analysis import report
 from .backends import BackendError, PROBE, make_backend, torch_status
-from .config import DATA_DIR, WEB_DIR
+from .config import BUNDLE_DATA_DIR, DATA_DIR, WEB_DIR
 from .perturb import RULES, build_conditions, count_calls, default_config
 from .scripts import LANG_INFO, bridge, script_of
 from .speech import SpeechError, transcribe
@@ -52,7 +52,7 @@ def speech_transcribe(file: UploadFile = File(...), lang: str = Form(...), model
 def health():
     return {"version": __version__, "torch": torch_status(), "langs": {k: v["name"] for k, v in LANG_INFO.items()},
             "rules": {k: v[0] for k, v in RULES.items()}, "defaults": default_config(),
-            "paper_data": bool(list((DATA_DIR / "paper").glob("*.jsonl")))}
+            "paper_data": bool(list((BUNDLE_DATA_DIR / "paper").glob("*.jsonl")))}
 
 
 # ---- data --------------------------------------------------------------------------------------------------
