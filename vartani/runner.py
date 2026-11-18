@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from .backends import BackendError, make_backend
 from .config import DATA_DIR, WORKERS
 from .perturb import build_conditions, count_calls
+from .security import redact_secrets
 
 RUNS = DATA_DIR / "runs"
 _jobs: Dict[str, dict] = {}
@@ -24,7 +25,19 @@ def _dir(rid: str):
 
 
 def _save_meta(meta: dict):
+    clean = redact_secrets(meta)
+    meta.clear()
+    meta.update(clean)
     (_dir(meta["id"]) / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _read_meta(path) -> dict:
+    """Read metadata while migrating any secrets out of old local run files."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    clean = redact_secrets(raw)
+    if clean != raw:
+        path.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
+    return clean
 
 
 def load_rows(rid: str) -> List[dict]:
@@ -43,7 +56,7 @@ def list_runs() -> List[dict]:
     RUNS.mkdir(parents=True, exist_ok=True)
     out = []
     for p in RUNS.glob("*/meta.json"):
-        m = json.loads(p.read_text(encoding="utf-8"))
+        m = _read_meta(p)
         if m["status"] in ("running", "queued") and m["id"] not in _jobs:
             m["status"] = "interrupted"
         if m["id"] in _jobs:
@@ -58,7 +71,7 @@ def get_meta(rid: str) -> Optional[dict]:
     p = _dir(rid) / "meta.json"
     if not p.exists():
         return None
-    m = json.loads(p.read_text(encoding="utf-8"))
+    m = _read_meta(p)
     if m["status"] in ("running", "queued"):
         m["status"] = "interrupted"
     return m

@@ -126,7 +126,7 @@ def get_models():
 @app.post("/api/models")
 def put_model(body: dict = Body(...)):
     m = models.save_model(body)
-    return {k: v for k, v in m.items() if k not in ("api_key", "hf_token")}
+    return models.redact_secrets(m)
 
 
 @app.delete("/api/models/{mid}")

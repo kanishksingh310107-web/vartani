@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from .config import DATA_DIR
+from .security import redact_secrets
 
 P = DATA_DIR / "user" / "models.json"
 PRESETS = [
@@ -32,7 +33,7 @@ def _all() -> list:
 def list_models(mask: bool = True) -> list:
     out = _all()
     if mask:
-        out = [{**{k: v for k, v in m.items() if k not in ("api_key", "hf_token")},
+        out = [{**redact_secrets(m),
                 "has_key": bool(m.get("api_key")), "has_hf_token": bool(m.get("hf_token"))} for m in out]
     return out
 
