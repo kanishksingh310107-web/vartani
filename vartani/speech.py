@@ -15,7 +15,18 @@ class SpeechError(RuntimeError):
 
 _ALLOWED = {"tiny", "base", "small"}
 _models: dict = {}
+_cpu_fallback: set[str] = set()
 _lock = threading.Lock()
+
+
+def _recognize(whisper_model, path: Path, lang: str, size: str, device: str):
+    with _lock:
+        key = (size, device)
+        if key not in _models:
+            _models[key] = whisper_model(size, device=device, compute_type="float16" if device == "cuda" else "int8")
+        model = _models[key]
+    segments, info = model.transcribe(str(path), language=lang, beam_size=3, vad_filter=True)
+    return " ".join(segment.text.strip() for segment in segments).strip(), info
 
 
 def transcribe(path: Path, lang: str, model_size: str = "base") -> dict:
@@ -28,23 +39,22 @@ def transcribe(path: Path, lang: str, model_size: str = "base") -> dict:
     except ImportError as e:
         raise SpeechError("Open Speech check and select Install speech support before transcribing.") from e
 
-    with _lock:
-        model = _models.get(model_size)
-        if model is None:
-            try:
-                import ctranslate2
-                has_cuda = ctranslate2.get_cuda_device_count() > 0
-            except Exception:
-                has_cuda = False
-            try:
-                model = WhisperModel(model_size, device="cuda" if has_cuda else "cpu",
-                                     compute_type="float16" if has_cuda else "int8")
-            except Exception as e:
-                raise SpeechError(f"Could not load Whisper {model_size}: {e}") from e
-            _models[model_size] = model
     try:
-        segments, info = model.transcribe(str(path), language=lang, beam_size=3, vad_filter=True)
-        text = " ".join(segment.text.strip() for segment in segments).strip()
+        import ctranslate2
+        has_cuda = model_size not in _cpu_fallback and ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        has_cuda = False
+    try:
+        if has_cuda:
+            try:
+                text, info = _recognize(WhisperModel, path, lang, model_size, "cuda")
+            except (RuntimeError, OSError):
+                with _lock:
+                    _models.pop((model_size, "cuda"), None)
+                    _cpu_fallback.add(model_size)
+                text, info = _recognize(WhisperModel, path, lang, model_size, "cpu")
+        else:
+            text, info = _recognize(WhisperModel, path, lang, model_size, "cpu")
     except Exception as e:
         raise SpeechError(f"Could not transcribe this audio: {e}") from e
     if not text:

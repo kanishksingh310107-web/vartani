@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import pytest
 
-from vartani import optional_setup, runner
+from vartani import optional_setup, runner, speech
 from vartani.app import app
 
 
@@ -68,3 +70,25 @@ def test_failed_staging_can_retry_without_touching_profile(tmp_path, monkeypatch
     assert optional_setup.status("speech")["state"] == "done"
     assert destination.joinpath(".vartani-installed").is_file()
     assert settings.read_text(encoding="utf-8") == "keep me"
+
+
+def test_speech_uses_cpu_when_cuda_libraries_are_missing(monkeypatch, tmp_path):
+    attempts = []
+    monkeypatch.setattr(speech, "_models", {})
+    monkeypatch.setattr(speech, "_cpu_fallback", set())
+    monkeypatch.setitem(sys.modules, "ctranslate2", SimpleNamespace(get_cuda_device_count=lambda: 1))
+
+    def model(size, device, compute_type):
+        attempts.append(device)
+
+        def recognize(*args, **kwargs):
+            if device == "cuda":
+                raise RuntimeError("Unable to load CUDA library")
+            return [SimpleNamespace(text="Namaste")], SimpleNamespace(language="hi", duration=1)
+
+        return SimpleNamespace(transcribe=recognize)
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=model))
+    assert speech.transcribe(tmp_path / "sound.wav", "hi", "tiny")["text"] == "Namaste"
+    assert speech.transcribe(tmp_path / "sound.wav", "hi", "tiny")["text"] == "Namaste"
+    assert attempts == ["cuda", "cpu"]
