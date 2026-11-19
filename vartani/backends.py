@@ -16,6 +16,8 @@ from typing import Dict, Optional
 
 import httpx
 
+from .security import redact_message
+
 from .prompts import LETTERS, format_prompt
 
 
@@ -32,7 +34,7 @@ class BackendError(RuntimeError):
     pass
 
 
-def _hf_load_error(hf_id: str, error: Exception) -> str:
+def _hf_load_error(hf_id: str, error: Exception, token: str = "") -> str:
     detail = str(error)
     low = detail.lower()
     if any(term in low for term in ("gated repo", "gatedrepo", "401 client error", "403 client error", "restricted to", "must have access")):
@@ -47,7 +49,8 @@ def _hf_load_error(hf_id: str, error: Exception) -> str:
                 "and confirm that it contains a Transformers model configuration.")
     if "chat template" in low or "apply_chat_template" in low:
         return f"{hf_id} does not provide a compatible chat template, which Vartani needs for its test prompts."
-    return f"Model {hf_id} failed while loading or answering: {detail[:900]}"
+    safe = redact_message(detail, {"hf_token": token})
+    return f"Model {hf_id} failed while loading or answering: {safe[:900]}"
 
 
 def _softmax(d: Dict[str, float]) -> Dict[str, float]:
@@ -97,7 +100,8 @@ class OpenAICompat:
                 return r.json()
             if r.status_code in (401, 403):
                 raise BackendError(f"The model server rejected authentication (HTTP {r.status_code}). Check the API key and confirm this account can use model {self.model!r}.")
-            last = f"HTTP {r.status_code}: {r.text[:300]}"
+            safe = redact_message(r.text, {"api_key": self.key})
+            last = f"HTTP {r.status_code}: {safe[:300]}"
             error_text = r.text.lower()
             model_unavailable = (
                 "model_not_found" in error_text
@@ -111,7 +115,7 @@ class OpenAICompat:
             )
             if ("api.groq.com" in self.base and r.status_code in (400, 404)
                     and model_unavailable):
-                raise BackendError(f"Groq says model {self.model!r} is unavailable. Check its exact ID in Groq's active model list: https://console.groq.com/docs/models. Provider detail: {r.text[:220]}")
+                raise BackendError(f"Groq says model {self.model!r} is unavailable. Check its exact ID in Groq's active model list: https://console.groq.com/docs/models. Provider detail: {safe[:220]}")
             if r.status_code == 404 and model_unavailable:
                 raise BackendError(f"The server is reachable, but model {self.model!r} was not found there. Check the exact model name and make sure it is installed/enabled on that provider.")
             if r.status_code in (429, 500, 502, 503, 504):
@@ -147,7 +151,7 @@ class OpenAICompat:
             text = ((self._post(body).get("choices") or [{}])[0].get("message") or {}).get("content") or ""
             found = _LETTER.findall(re.sub(r"<think>.*?</think>", "", text, flags=re.S))
             letter = found[-1] if found else None
-            return Answer(letter, None, None, text[:200], int((time.time() - started) * 1000))
+            return Answer(letter, None, None, redact_message(text, {"api_key": self.key})[:200], int((time.time() - started) * 1000))
         margin = probs = None
         lp = ((choice.get("logprobs") or {}).get("content") or [])
         if lp:
@@ -158,7 +162,7 @@ class OpenAICompat:
                     cand[l] = float(tok["logprob"])
             if len(cand) >= 2:
                 margin, probs = _margin(cand), _softmax(cand)
-        return Answer(letter, margin, probs, text[:200], int((time.time() - started) * 1000))
+        return Answer(letter, margin, probs, redact_message(text, {"api_key": self.key})[:200], int((time.time() - started) * 1000))
 
 
 class HFLocal:
@@ -204,7 +208,7 @@ class HFLocal:
                     model = Gemma3ForConditionalGeneration.from_pretrained(self.hf_id, dtype=dtype, **auth)
                 model = model.to(dev).eval()
             except Exception as e:
-                raise BackendError(_hf_load_error(self.hf_id, e)) from e
+                raise BackendError(_hf_load_error(self.hf_id, e, self.token)) from e
             ids = {}
             for l in LETTERS:
                 enc = tok.encode(l, add_special_tokens=False)
@@ -239,7 +243,7 @@ class HFLocal:
             except BackendError:
                 raise
             except Exception as e:
-                raise BackendError(_hf_load_error(self.hf_id, e)) from e
+                raise BackendError(_hf_load_error(self.hf_id, e, self.token)) from e
 
 
 def make_backend(cfg: dict):

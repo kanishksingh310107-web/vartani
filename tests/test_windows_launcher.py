@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import socket
 
@@ -49,14 +50,14 @@ def test_import_copies_old_profile_without_overwriting_or_deleting_source(tmp_pa
     (source / "user").mkdir(parents=True)
     (source / "runs" / "run1").mkdir(parents=True)
     (source / "user" / "models.json").write_text("old settings", encoding="utf-8")
-    (source / "runs" / "run1" / "meta.json").write_text("old run", encoding="utf-8")
+    (source / "runs" / "run1" / "meta.json").write_text('{"id": "run1", "name": "old run"}', encoding="utf-8")
     (target / "user").mkdir(parents=True)
     (target / "user" / "models.json").write_text("newer settings", encoding="utf-8")
 
     copied, skipped = copy_existing_profile(source, target)
     assert (copied, skipped) == (1, 1)
     assert (target / "user" / "models.json").read_text(encoding="utf-8") == "newer settings"
-    assert (target / "runs" / "run1" / "meta.json").read_text(encoding="utf-8") == "old run"
+    assert json.loads((target / "runs" / "run1" / "meta.json").read_text(encoding="utf-8"))["name"] == "old run"
     assert (source / "user" / "models.json").read_text(encoding="utf-8") == "old settings"
     assert copy_existing_profile(source, target) == (0, 2)
 

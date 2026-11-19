@@ -89,14 +89,24 @@ def parse_dataset(text: str, filename: str = "", default_lang: Optional[str] = N
     text = text.lstrip("\ufeff")
     rows: List[dict] = []
     s = text.strip()
-    if filename.lower().endswith(".csv") or (s and s[0] not in "[{"):
-        rows = list(csv.DictReader(io.StringIO(text)))
-    elif s.startswith("["):
-        rows = json.loads(s)
+    ext = filename.lower().rsplit(".", 1)[-1]
+    if ext == "csv" or (ext not in {"json", "jsonl", "ndjson"} and s and s[0] not in "[{"):
+        rows = list(csv.DictReader(io.StringIO(text), strict=True))
+    elif ext == "json" or (ext not in {"jsonl", "ndjson"} and s.startswith("[")):
+        parsed = json.loads(s)
+        rows = parsed if isinstance(parsed, list) else [parsed]
     else:
-        rows = [json.loads(line) for line in s.splitlines() if line.strip()]
+        for line_no, line in enumerate(s.splitlines(), 1):
+            if line.strip():
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    raise ValueError(f"line {line_no} is not valid JSON") from None
     items, warnings = [], []
     for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            warnings.append(f"row {i + 1}: expected an object with a question and four options")
+            continue
         it, w = normalize_item(r, default_lang, i)
         warnings += w
         if it:

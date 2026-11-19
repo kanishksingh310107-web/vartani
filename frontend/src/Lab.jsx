@@ -90,7 +90,7 @@ function ModelPicker({ modelId, setModelId }) {
     } catch(e) { setSetup({state:"failed", message:e.message}); }
   };
   const refresh = () => api("/models").then(setData);
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh().catch(e => setTest({ok: false, error: e.message})); }, []);
   const pick = (p) => { setTest(null); setForm({ ...p, api_key: "" }); };
   const save = async () => {
     const m = await api("/models", { json: form });
@@ -118,8 +118,26 @@ function ModelPicker({ modelId, setModelId }) {
     } catch (e) { setTest({ ok: false, error: e.message }); if (modelId === m.id) setModelId(null); }
     finally { setCheckingId(null); }
   };
-  const del = async (id) => { await api(`/models/${id}`, { method: "DELETE" }); if (modelId === id) setModelId(null); refresh(); };
+  const del = async (id) => {
+    try {
+      await api(`/models/${id}`, { method: "DELETE" });
+      if (modelId === id) setModelId(null);
+      if (form?.id === id) setForm(null);
+      setTest(null);
+      await refresh();
+    } catch (e) { setTest({ok: false, error: e.message}); }
+  };
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const clear = (k) => (e) => setForm({ ...form, [k]: "", [`clear_${k}`]: e.target.checked });
+  const saveChanges = async () => {
+    setBusy(true); setTest(null);
+    try {
+      const m = await save();
+      if (modelId === m.id) setModelId(null);
+      setTest({ok: true, savedOnly: true});
+    } catch (e) { setTest({ok: false, error: e.message}); }
+    finally { setBusy(false); }
+  };
   return (
     <section className="card">
       <h3><span className="num">2</span> Model to test</h3>
@@ -151,7 +169,8 @@ function ModelPicker({ modelId, setModelId }) {
               <p role="status">{setup?.installed ? "Local support installed." : (setup?.message || "Checking local support…")}</p>
               {!setup?.installed && <button className="btn" disabled={!setup || setup.state === "running"} onClick={installSupport}>{setup?.state === "running" ? "Installing support…" : setup?.state === "failed" ? "Retry setup" : "Install local model support"}</button>}
               <label>Hugging Face model ID or local folder path<input value={form.hf_id || ""} onChange={f("hf_id")} placeholder="Qwen/Qwen3-4B or C:\\Models\\my-finetune" /></label>
-              <label>Hugging Face read token (only for private or gated models)<input type="password" value={form.hf_token || ""} onChange={f("hf_token")} placeholder={form.has_hf_token ? "saved — leave blank to keep" : "hf_…"} autoComplete="new-password" /></label>
+              <label>Hugging Face read token (only for private or gated models)<input type="password" value={form.hf_token || ""} disabled={form.clear_hf_token} onChange={f("hf_token")} placeholder={form.has_hf_token ? "saved — leave blank to keep" : "hf_…"} autoComplete="new-password" /></label>
+              {form.has_hf_token && <label><input type="checkbox" checked={!!form.clear_hf_token} onChange={clear("hf_token")} />Remove saved token</label>}
               <label>Run on<select value={form.device || ""} onChange={f("device")}><option value="">Auto detect</option><option value="cpu">CPU</option><option value="cuda">NVIDIA CUDA GPU</option></select></label>
               <small>For local Transformers models. Testing downloads missing weights; cached weights are reused. For gated models, accept the terms and wait for approval, then enter a Hugging Face read token. GGUF files need a model server.</small>
             </>
@@ -159,16 +178,18 @@ function ModelPicker({ modelId, setModelId }) {
             <>
               <label>Server address<input value={form.base_url || ""} onChange={f("base_url")} /></label>
               <label>Model name<input value={form.model || ""} onChange={f("model")} /></label>
-              <label>API key {form.needs_key ? "" : "(only if the server needs one)"}<input type="password" value={form.api_key || ""} onChange={f("api_key")} placeholder={form.has_key ? "saved — leave blank to keep" : ""} /></label>
+              <label>API key {form.needs_key ? "" : "(only if the server needs one)"}<input type="password" value={form.api_key || ""} disabled={form.clear_api_key} autoComplete="new-password" onChange={f("api_key")} placeholder={form.has_key ? "saved — leave blank to keep" : ""} /></label>
+              {form.has_key && <label><input type="checkbox" checked={!!form.clear_api_key} onChange={clear("api_key")} />Remove saved API key</label>}
             </>
           )}
           {form.hint && <p className="muted">{form.hint}</p>}
           <div className="row gap">
             <button className="btn primary" disabled={busy || (form.kind === "hf" && !setup?.installed)} onClick={doTest}>{busy ? "Testing… first use may take a few minutes" : form.kind === "hf" ? "Save and test local model" : "Save and test connection"}</button>
+            {form.id && <button className="btn" disabled={busy} onClick={saveChanges}>Save changes</button>}
             <button className="btn" onClick={() => { setForm(null); setTest(null); }}>Close</button>
           </div>
           {test && (test.ok
-            ? <p className="ok-line">✓ Connected. The model answered “{test.letter}” in {test.ms} ms{test.correct ? " (correct)" : ""}. {test.margin_available ? "Confidence margins are available." : "This server returns no log-probabilities, so confidence margins will be unavailable."}</p>
+            ? test.savedOnly ? <p className="ok-line">✓ Connection settings saved.</p> : <p className="ok-line">✓ Connected. The model answered “{test.letter}” in {test.ms} ms{test.correct ? " (correct)" : ""}. {test.margin_available ? "Confidence margins are available." : "This server returns no log-probabilities, so confidence margins will be unavailable."}</p>
             : <p className="err-line">✗ {test.error}</p>)}
         </div>
       )}
