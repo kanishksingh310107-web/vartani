@@ -3,12 +3,12 @@ import { api } from "./api.js";
 import { ReportBody } from "./Report.jsx";
 import { scoreGate } from "./releaseGate.js";
 
-function NextStep({ report, guidedBatch }) {
+function NextStep({ report, guidedBatch, runId }) {
   const gain = report.bridge_gain;
   const script = report.script_gap;
   let advice;
   if (gain?.effect > 0) {
-    advice = `Native-script conversion raised accuracy by ${gain.effect} points across ${gain.n} paired questions. It corrected ${gain.only_a} answers and worsened ${gain.only_b}. Try the converter and check the gain on fresh examples before changing how you send inputs.`;
+    advice = `Native-script conversion raised accuracy by ${gain.effect} points across ${gain.n} paired questions. It corrected ${gain.only_a} answers and worsened ${gain.only_b}. Review the proposed conversions and export the rows you approve. Check the gain on fresh examples before changing how you send inputs.`;
   } else if (gain) {
     advice = `Keep the Roman input for now. Conversion changed accuracy by ${gain.effect} points on ${gain.n} paired questions. Try a different model on the same dataset and compare both workflows.`;
   } else {
@@ -22,6 +22,7 @@ function NextStep({ report, guidedBatch }) {
     <div className="row gap wrap">
       <a className="btn primary" href="/features.html#guided">Compare models and input fixes</a>
       <a className="btn" href="/features.html#fix-input">Try the text converter</a>
+      {gain?.effect > 0 && <a className="btn" href={`/features.html?fix_run=${encodeURIComponent(runId)}#fix-dataset`}>Review and apply the fix</a>}
     </div>
   </section>;
 }
@@ -82,7 +83,7 @@ export default function RunPage({ id, nav, lab }) {
         <div className="gate-checks">{gate.checks.map((c) => <div key={c.label}><b className={c.pass ? "ok" : gate.status === "pending" ? "muted" : "bad"}>{c.pass ? "✓" : gate.status === "pending" ? "…" : "×"}</b> {c.label}: {c.actual == null ? "not available" : `${c.actual}${c.label === "Scored questions" ? "" : "%"}`} (target {c.op} {c.target}{c.label === "Scored questions" ? "" : "%"})</div>)}</div>
         <p className="muted">This is a configurable project check, not a universal definition of model quality.</p>
       </section>}
-      {meta.status === "done" && rep?.n_items > 0 && <NextStep report={rep} guidedBatch={meta.config?.guided_batch} />}
+      {meta.status === "done" && rep?.n_items > 0 && <NextStep report={rep} guidedBatch={meta.config?.guided_batch} runId={id} />}
       {rep && rep.n_items > 0 ? <ReportBody rep={rep} runId={id} /> : running && <p className="muted">The report appears as soon as the first item finishes.</p>}
     </div>
   );

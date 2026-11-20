@@ -134,6 +134,14 @@ def guided_plan(body: dict = Body(...)):
     return _guided_plan(body)[1]
 
 
+@app.post("/api/guided/fix-preview")
+def guided_fix_preview(body: dict = Body(...)):
+    try:
+        return guided.conversion_preview(body.get("items"))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+
 @app.post("/api/guided/start")
 def guided_start(body: dict = Body(...)):
     selected, plan = _guided_plan(body)
@@ -286,6 +294,26 @@ def run_report(rid: str):
     if not m:
         raise HTTPException(404, "no such run")
     return {"meta": m, "report": report(runner.load_rows(rid))}
+
+
+@app.get("/api/runs/{rid}/fix-preview")
+def run_fix_preview(rid: str):
+    if not re.fullmatch(r"[a-f0-9]{10}", rid):
+        raise HTTPException(404, "Run not found.")
+    meta = runner.get_meta(rid)
+    if not meta or meta["status"] != "done":
+        raise HTTPException(404, "Choose a completed run.")
+    items = []
+    for prepared in runner.load_items(rid):
+        conditions = prepared["conditions"]
+        items.append({"id": prepared["qid"], "lang": prepared["lang"], "gold": prepared.get("gold"),
+                      "native": conditions.get("native"),
+                      "roman": conditions.get("roman") if prepared["meta"].get("roman_source") == "provided" else None})
+    if not items:
+        raise HTTPException(400, "This report has no saved questions. Upload your original dataset to review it.")
+    if any(not (item["native"] or item["roman"]) for item in items):
+        raise HTTPException(400, "This run did not keep the original native input. Upload your original dataset to review it.")
+    return guided_fix_preview({"items": items})
 
 
 @app.get("/api/runs/{rid}/items")

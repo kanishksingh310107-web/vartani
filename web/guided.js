@@ -108,10 +108,18 @@
         if (complete.length < data.entries.length) summary += "<p>Ranking covers only the models that finished.</p>";
         if (data.conversion_beats_raw && conversion) {
           const score = conversion.scores;
+          const languageResults = Object.entries(score.languages).map(([lang, result]) =>
+            `${esc(names[lang] || lang)} ${result.raw}/${result.questions} → ${result.converted}/${result.questions}`);
           summary += `<h4>Best workflow to trial · ${leaders(data, data.converted_leaders)} with conversion</h4>
-            <p>For ${esc(conversion.label)}, conversion moved the score from ${score.raw_score}% to ${score.converted_score}%. It corrected ${score.fixed} input cases and worsened ${score.harmed}. <a href="#fix-input">Try the same converter on your input</a>. Review the converted text before sending it to the model.</p>`;
+            <p>For ${esc(conversion.label)}, conversion moved the score from ${score.raw_score}% to ${score.converted_score}%. It corrected ${score.fixed} input cases and worsened ${score.harmed}.</p>
+            <p>Original Roman questions, before and after conversion · ${languageResults.join(" · ")}. Keep Roman input for languages where conversion failed to improve these questions.</p>
+            <p><a class="btn primary" data-fix-run="${esc(conversion.id)}" href="#fix-dataset">Review and apply the fix</a> <a class="btn" href="#fix-input">Convert one text</a></p>`;
         } else {
           summary += "<p><b>Next step.</b> Keep Roman input with the top model for this trial. The tested conversion did not improve on the best raw score. Collect real spelling failures and check them on a fresh set before changing your input flow.</p>";
+          const best = data.entries.find((e) => e.id === data.raw_leaders[0]);
+          const native = Object.entries(best.scores.languages).filter(([, r]) => r.native_correct > r.matched_raw)
+            .map(([lang, r]) => `${esc(names[lang] || lang)} ${r.matched_raw}/${r.native_total} → ${r.native_correct}/${r.native_total}`);
+          if (native.length) summary += `<p>Offer an option to enter native text directly. On questions with both versions, ${esc(best.label)} scored higher with the supplied native text · ${native.join(" · ")}.</p>`;
         }
         if (complete.every((e) => Math.max(e.scores.raw_score, e.scores.converted_score) <= 25)) {
           summary += "<p><b>Low accuracy across the trial.</b> Every workflow scored at or below the 25% benchmark for random guessing on four options. Try other models or check the question set before choosing a workflow.</p>";

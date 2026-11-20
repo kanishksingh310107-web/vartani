@@ -8,7 +8,9 @@
   <style>
     textarea { width: 100%; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: #151626; color: var(--ink); font: inherit; resize: vertical; }
     .case-example { padding: .75rem 0; border-bottom: 1px solid var(--line); }
-    #guided, #fix-input { scroll-margin-top: 1rem; }
+    #guided, #fix-input, #fix-dataset { scroll-margin-top: 1rem; }
+    .fix-preview { min-width: 0; overflow-wrap: anywhere; }
+    .fix-preview pre { white-space: pre-wrap; font: inherit; margin-top: .25rem; }
   </style>
 </head>
 <body>
@@ -65,6 +67,27 @@
       </div>
       <p id="fix-message" class="muted" role="status"></p>
     </section>
+    <section class="card feature-form" id="fix-dataset">
+      <h3>Apply the fix to your dataset</h3>
+      <p class="muted">Compare the original Roman text with the proposed native text. Approve the rows that keep the meaning and the same correct answer. Export a separate JSONL file with the original Roman text and answer keys.</p>
+      <div class="row gap wrap">
+        <button id="fix-preview-upload" class="btn" disabled>Preview loaded dataset</button>
+        <button id="fix-preview-run" class="btn" hidden>Preview questions from this run</button>
+      </div>
+      <p id="fix-dataset-message" role="status" class="muted">Load a dataset above to review its conversion.</p>
+      <div id="fix-review" hidden>
+        <div class="row gap wrap">
+          <button id="fix-prev" class="btn">Previous</button>
+          <span id="fix-position"></span>
+          <button id="fix-next" class="btn">Next</button>
+          <label>Jump to question<input id="fix-jump" type="number" min="1" /></label>
+        </div>
+        <div class="grid2"><div id="fix-original" class="fix-preview"></div><div id="fix-draft" class="fix-preview"></div></div>
+        <label class="model-option"><input id="fix-approve" type="checkbox" /> Use the proposed native text for this row</label>
+        <p id="fix-approval-count" class="muted"></p>
+        <button id="fix-export" class="btn primary" disabled>Download reviewed JSONL</button>
+      </div>
+    </section>
     <section class="card feature-form">
       <h3>Keep this test set for later</h3>
       <div class="row gap wrap"><label class="suite-name">Suite name<input id="suite-name" value="My release benchmark" /></label><button id="save-suite" class="btn" disabled>Save reusable suite</button></div>
@@ -94,6 +117,7 @@
     <footer>Vartani measures how model answers respond to spelling changes. It does not certify answer correctness outside the supplied answer key.</footer>
   </main>
   <script src="/features.js?v=2"></script>
-  <script src="/guided.js?v=1"></script>
+  <script src="/guided.js?v=2"></script>
+  <script src="/fix-dataset.js?v=1"></script>
 </body>
 </html>
