@@ -132,6 +132,7 @@ def main():
     env = {**os.environ, "VARTANI_HOME": str(profile), "VARTANI_DATA": str(profile / "data"),
            "HF_HOME": str(profile / "hf")}
     if flags.cache:
+        env["HF_HUB_OFFLINE"] = "1"
         import shutil
         shutil.copytree(flags.cache, Path(env["HF_HOME"]))
     group = "Vartani"
