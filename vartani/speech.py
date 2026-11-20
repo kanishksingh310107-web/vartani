@@ -5,6 +5,10 @@ returned transcript is kept if the user chooses to run the benchmark.
 """
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -61,3 +65,32 @@ def transcribe(path: Path, lang: str, model_size: str = "base") -> dict:
         raise SpeechError("No speech was recognized. Try a clearer, longer recording.")
     return {"text": text, "language": info.language, "duration": round(float(info.duration or 0), 2),
             "model": f"Whisper {model_size}"}
+
+
+def transcribe_for_app(path: Path, lang: str, model_size: str = "base") -> dict:
+    """Run Whisper separately from PyTorch and the embedded app on Windows."""
+    from .config import PACKAGED, ROOT
+    if os.name != "nt" or not PACKAGED:
+        return transcribe(path, lang, model_size)
+    executable = Path(sys.executable)
+    if executable.name.lower() == "pythonw.exe":
+        executable = executable.with_name("python.exe")
+    try:
+        proc = subprocess.run(
+            [str(executable), "-E", "-s", "-B", "-m", "vartani.speech_worker", str(path), lang, model_size],
+            cwd=ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            encoding="utf-8", errors="replace", timeout=600, creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except subprocess.TimeoutExpired:
+        raise SpeechError("Whisper did not finish in time. Check your connection for a first download, or try a smaller model.") from None
+    except OSError:
+        raise SpeechError("Vartani could not start speech recognition. Restart Vartani and retry.") from None
+    try:
+        data = json.loads(proc.stdout.strip().splitlines()[-1])
+        if proc.returncode == 0 and isinstance(data.get("result"), dict):
+            return data["result"]
+        if proc.returncode == 1 and isinstance(data.get("error"), str):
+            raise SpeechError(data["error"])
+    except (ValueError, IndexError, AttributeError):
+        pass
+    raise SpeechError("Speech recognition stopped unexpectedly. Restart Vartani and retry.")

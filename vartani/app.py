@@ -20,7 +20,7 @@ from .backends import BackendError, PROBE, make_backend, torch_status
 from .config import BUNDLE_DATA_DIR, DATA_DIR, WEB_DIR
 from .perturb import RULES, build_conditions, count_calls, default_config
 from .scripts import LANG_INFO, bridge, script_of
-from .speech import SpeechError, transcribe
+from .speech import SpeechError, transcribe_for_app as transcribe
 
 def _migrate_profile():
     try:
