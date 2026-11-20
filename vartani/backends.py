@@ -7,7 +7,9 @@ Two real connectors, no simulated one:
                  Needs only an HTTP address. Uses token log-probabilities for the margin when the server returns them.
 """
 from __future__ import annotations
+from importlib.util import find_spec
 import math
+import sys
 import re
 import threading
 import time
@@ -255,11 +257,12 @@ def make_backend(cfg: dict):
 
 
 def torch_status() -> dict:
-    try:
-        import torch
-        return {"installed": True, "cuda": bool(torch.cuda.is_available())}
-    except Exception:
-        return {"installed": False, "cuda": False}
+    # A readiness check must not import native inference libraries. CUDA is
+    # probed only when the local-model backend has already loaded PyTorch.
+    torch = sys.modules.get("torch")
+    cuda = getattr(torch, "cuda", None)
+    return {"installed": torch is not None or find_spec("torch") is not None,
+            "cuda": bool(cuda.is_available()) if cuda is not None else False}
 
 
 PROBE = {"passage": "The sky is blue on a clear day.", "question": "What colour is the sky on a clear day?",
