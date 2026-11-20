@@ -7,8 +7,8 @@ DefaultDirName={localappdata}\Programs\Vartani
 DefaultGroupName=Vartani
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
 MinVersion=10.0.17763
 OutputDir={#OutputFolder}
 OutputBaseFilename=VartaniSetup-x64
@@ -22,7 +22,7 @@ WizardStyle=modern
 AppMutex=Local\VartaniDesktopInstallerGuard
 
 [Files]
-Source: "{#PayloadFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadFolder}\*"; DestDir: "{app}"; Excludes: "__pycache__\*,*.pyc"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Vartani"; Filename: "{app}\Vartani.exe"; WorkingDir: "{app}"

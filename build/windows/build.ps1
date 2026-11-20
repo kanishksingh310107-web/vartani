@@ -2,12 +2,13 @@ param(
     [string]$RuntimeArchive,
     [string]$WebViewWheel,
     [string]$InnoCompiler = 'ISCC.exe',
-    [string]$Wheelhouse
+    [string]$Wheelhouse,
+    [string]$ArtifactRoot
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$Artifacts = Join-Path $Root 'artifacts'
+$Artifacts = if ($ArtifactRoot) { [IO.Path]::GetFullPath($ArtifactRoot) } else { Join-Path $Root 'artifacts' }
 $BuildId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $Stage = Join-Path $Artifacts "Vartani-Windows-x64-$BuildId"
 $Bundle = Join-Path $Stage 'Vartani'
@@ -93,7 +94,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not extract the WebView2 assemblies.' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Microsoft.Web.WebView2.LICENSE.md') -Destination $Bundle
 $Launcher = Join-Path $Bundle 'Vartani.exe'
 $WebViewCore = Join-Path $Bundle 'Microsoft.Web.WebView2.Core.dll'
-$WebViewForms = Join-Path $Bundle 'Microsoft.Web.WebView2.WinForms.dll' 
+$WebViewForms = Join-Path $Bundle 'Microsoft.Web.WebView2.WinForms.dll'
 & $Compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll "/reference:$WebViewCore" "/reference:$WebViewForms" "/out:$Launcher" (Join-Path $PSScriptRoot 'Vartani.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Could not compile Vartani.exe.' }
 $SmokeLog = Join-Path $Stage 'packaged-smoke.log'

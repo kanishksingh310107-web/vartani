@@ -20,7 +20,7 @@ your dataset and is reported as an association, not proof that one spelling rule
 
 ## Run it
 
-On 64-bit Windows, extract the packaged ZIP and double-click **Vartani.exe**. It includes Python and the core app. See [Windows setup and build instructions](docs/windows-build.md) for profile migration and troubleshooting.
+On 64-bit Windows, run **VartaniSetup-x64.exe** and open Vartani from the Start menu. It includes Python and the core app. See [Windows setup and build instructions](docs/windows-build.md) for profile migration and troubleshooting.
 
 ```
 python main.py
@@ -36,7 +36,7 @@ Models (nothing is simulated — there is no demo mode):
 
 **Speech-to-text robustness (optional):** open **Speech check**, select **Install speech support**, then choose a starter question and record or upload a short clip. First transcription downloads the chosen Whisper model. Later transcriptions reuse the cached model. Vartani compares the typed Roman baseline with the raw transcript and a native-to-Roman ITRANS version. Audio is deleted after transcription. Only the reviewed text is stored in the run.
 
-**Windows users:** a bundled launcher build (no user-side Python installation) can be created with the steps in [`docs/windows-build.md`](docs/windows-build.md). It stores models, settings, logs, and runs in `%LOCALAPPDATA%\Vartani`, outside the extracted app folder.
+**Windows users:** a bundled installer (no user-side Python installation) can be created with the steps in [`docs/windows-build.md`](docs/windows-build.md). It stores models, settings, logs, and runs in `%LOCALAPPDATA%\Vartani`, outside the installed app folder.
 
 To add your own model, open the **Test lab** and choose **Add my Hugging Face model (runs locally)** for a compatible Transformers model ID or downloaded model folder. Select **Install local model support** if needed. Testing downloads missing model weights and reuses cached files. Choose **Add my API-compatible model** for a hosted or local server. GGUF files require a separate model server.
 
@@ -62,6 +62,8 @@ Notebook result files (`*.jsonl`) can be imported on the **Runs** page.
 - The built-in Roman for native-only data is the paper's ITRANS Romanization, which is not how people type; supply real Roman text when you have it.
 - Margins are unavailable from servers that return no log-probabilities (e.g. Groq).
 - On Windows, saved API keys and Hugging Face tokens are encrypted for your Windows account. Vartani upgrades older saved keys on startup. If you move the profile to another computer or account, re-enter the keys there. Saving credentials is available on Windows; connections that do not need a key still work from source on other platforms.
+
+For a reproducible comparison of two local models, see [real-model comparison](docs/real-model-comparison.md).
 
 ## Tests
 `pip install pytest` then `python -m pytest` — checks that the paper's numbers reproduce, the statistics, perturbations, and a full run against a stub OpenAI-compatible server.

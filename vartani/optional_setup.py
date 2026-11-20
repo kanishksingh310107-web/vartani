@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -18,6 +19,7 @@ COMPONENTS = {
 }
 _jobs: dict[str, dict[str, str]] = {}
 _lock = threading.RLock()
+_logger = logging.getLogger(__name__)
 
 
 def _location(component: str) -> Path:
@@ -72,22 +74,26 @@ def _install(component: str) -> None:
     }
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NO_WINDOW
+    step = "preparing the profile"
     python = Path(sys.executable).with_name("python.exe") if sys.executable.lower().endswith("pythonw.exe") else sys.executable
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=destination.parent) as scratch:
+        with tempfile.TemporaryDirectory(prefix=".dep-", dir=APP_HOME) as scratch:
             staging = Path(scratch) / "packages"
             command = [
                 python, "-m", "pip", "--isolated", "install", "--no-input",
-                "--disable-pip-version-check", "--only-binary=:all:",
+                "--disable-pip-version-check", "--only-binary=:all:", "--no-compile",
                 "--timeout", "30", "--retries", "2", "--target", str(staging),
                 "-r", str(ROOT / requirement),
             ]
             if PACKAGED:
                 command.extend(("-c", str(ROOT / "requirements-windows.lock")))
+            step = "downloading and installing packages"
             subprocess.run(command, timeout=3600, **options)
             probe = "import sys; sys.path.append(sys.argv[1]); " + "; ".join(f"import {name}" for name in modules)
-            subprocess.run([python, "-c", probe, str(staging)], timeout=120, **options)
+            step = "checking package imports"
+            subprocess.run([python, "-B", "-c", probe, str(staging)], timeout=120, **options)
+            step = "saving the optional support folder"
             (staging / ".vartani-installed").touch()
             try:
                 staging.rename(destination)
@@ -97,7 +103,9 @@ def _install(component: str) -> None:
         with _lock:
             _activate(component)
             _jobs[component] = {"state": "done", "message": "Support installed. You can continue."}
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as error:
+        _logger.warning("Could not set up %s while %s (%s, code=%s).", component, step,
+                        type(error).__name__, getattr(error, "returncode", getattr(error, "errno", None)))
         with _lock:
             _jobs[component] = {
                 "state": "failed",
