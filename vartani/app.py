@@ -1,5 +1,6 @@
 """HTTP API + static web UI."""
 from __future__ import annotations
+from contextlib import asynccontextmanager
 import json
 import time
 import uuid
@@ -7,10 +8,12 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, datasets, evidence as ev, export, models, optional_setup, runner, suites
+from .credentials import CredentialError
 from .security import redact_message
 from .analysis import report
 from .backends import BackendError, PROBE, make_backend, torch_status
@@ -19,8 +22,28 @@ from .perturb import RULES, build_conditions, count_calls, default_config
 from .scripts import LANG_INFO, bridge, script_of
 from .speech import SpeechError, transcribe
 
-app = FastAPI(title="Vartani", version=__version__)
+def _migrate_profile():
+    try:
+        models.list_models()
+    except CredentialError:
+        # Keep the app usable. Model routes retry and show the recovery message.
+        pass
+    runner.migrate_run_metadata()
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    await run_in_threadpool(_migrate_profile)
+    yield
+
+
+app = FastAPI(title="Vartani", version=__version__, lifespan=lifespan)
 optional_setup.activate_installed()
+
+
+@app.exception_handler(CredentialError)
+async def credential_error(_request: Request, error: CredentialError):
+    return JSONResponse(status_code=409, content={"detail": str(error)})
 
 
 @app.post("/api/speech/transcribe")
@@ -41,6 +64,8 @@ def speech_transcribe(file: UploadFile = File(...), lang: str = Form(...), model
                 if size > max_bytes:
                     raise HTTPException(413, "Audio file is too large. Keep it under 25 MB.")
                 tmp.write(chunk)
+        if not size:
+            raise HTTPException(400, "The audio file is empty. Choose a recording with speech.")
         return transcribe(tmp_path, lang, model_size)
     except SpeechError as e:
         raise HTTPException(503, str(e)) from e
@@ -150,8 +175,10 @@ def get_models():
 
 @app.post("/api/models")
 def put_model(body: dict = Body(...)):
-    m = models.save_model(body)
-    return models.redact_secrets(m)
+    try:
+        return models.save_model(body)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
 
 
 @app.delete("/api/models/{mid}")
@@ -166,8 +193,7 @@ def test_model(body: dict = Body(...)):
         cfg = models.get_model(body["id"]) if body.get("id") else body
     except KeyError:
         raise HTTPException(404, "No such saved model")
-    if body.get("id") and not cfg.get("api_key") and body.get("api_key"):
-        cfg = {**cfg, "api_key": body["api_key"]}
+    models.require_model_key(cfg)
     try:
         a = make_backend(cfg).answer(PROBE)
     except BackendError as e:
@@ -188,7 +214,11 @@ def start_run(body: dict = Body(...)):
         raise HTTPException(400, "Choose a model first.")
     if not body.get("items"):
         raise HTTPException(400, "Add some test items first.")
-    return runner.create_run(body.get("name") or "Untitled run", body["items"], model, body.get("config") or {})
+    models.require_model_key(model)
+    try:
+        return runner.create_run(body.get("name") or "Untitled run", body["items"], model, body.get("config") or {})
+    except (ValueError, TypeError, KeyError) as e:
+        raise HTTPException(400, "The test set contains invalid or repeated question IDs. Reload the test set and try again.") from e
 
 
 @app.get("/api/runs")
@@ -232,14 +262,19 @@ def run_cancel(rid: str):
 @app.post("/api/runs/{rid}/resume")
 def run_resume(rid: str, body: dict = Body(...)):
     try:
-        return runner.resume_run(rid, models.get_model(body["model_id"]))
+        model = models.get_model(body["model_id"])
+        models.require_model_key(model)
+        return runner.resume_run(rid, model)
     except (KeyError, ValueError) as e:
         raise HTTPException(400, str(e))
 
 
 @app.delete("/api/runs/{rid}")
 def run_delete(rid: str):
-    runner.delete_run(rid)
+    try:
+        runner.delete_run(rid)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
     return {"ok": True}
 
 

@@ -78,6 +78,10 @@ def copy_existing_profile(source_data: Path, destination_data: Path) -> tuple[in
     source_data = Path(source_data)
     if not source_data.is_dir():
         raise SetupError(f"That folder does not exist:\n{source_data}")
+    from vartani.credentials import CredentialError, import_profiles, write_json
+    from vartani.security import credential_values, redact_secrets
+    import json
+
     copied = skipped = 0
     try:
         for name in ("user", "runs"):
@@ -93,9 +97,27 @@ def copy_existing_profile(source_data: Path, destination_data: Path) -> tuple[in
                     target.parent.mkdir(parents=True, exist_ok=True)
                     if target.exists():
                         skipped += 1
+                    elif tuple(part.casefold() for part in rel.parts) == ("user", "models.json"):
+                        if import_profiles(item, target):
+                            copied += 1
+                        else:
+                            skipped += 1
+                    elif name == "runs" and item.name.casefold() == "meta.json":
+                        raw = json.loads(item.read_text(encoding="utf-8-sig"))
+                        if not isinstance(raw, dict):
+                            raise ValueError("Invalid run metadata")
+                        clean = redact_secrets(raw, credential_values(raw))
+                        if "id" in raw:
+                            clean["id"] = raw["id"]
+                        if write_json(target, clean, replace=False):
+                            copied += 1
+                        else:
+                            skipped += 1
                     else:
                         copy2(item, target)
                         copied += 1
+    except (CredentialError, ValueError):
+        raise SetupError("Vartani could not safely import the old model settings or run metadata. Check the old profile format and Windows sign-in. The original profile was left untouched.") from None
     except OSError as e:
         reason = "The destination drive may be full." if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112 else "Check read/write access to both folders."
         raise SetupError(f"Some old data could not be copied. The original folder was left untouched; retrying will skip existing files. {reason}\nDetails: {e}") from e

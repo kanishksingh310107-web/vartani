@@ -61,7 +61,7 @@ Notebook result files (`*.jsonl`) can be imported on the **Runs** page.
 - Starter sets are 6 hand-written passages per language: for trying the tool, not for measuring a model.
 - The built-in Roman for native-only data is the paper's ITRANS Romanization, which is not how people type; supply real Roman text when you have it.
 - Margins are unavailable from servers that return no log-probabilities (e.g. Groq).
-- API keys are stored in plain text in `data/user/models.json` on your machine.
+- On Windows, saved API keys and Hugging Face tokens are encrypted for your Windows account. Vartani upgrades older saved keys on startup. If you move the profile to another computer or account, re-enter the keys there. Saving credentials is available on Windows; connections that do not need a key still work from source on other platforms.
 
 ## Tests
 `pip install pytest` then `python -m pytest` — checks that the paper's numbers reproduce, the statistics, perturbations, and a full run against a stub OpenAI-compatible server.

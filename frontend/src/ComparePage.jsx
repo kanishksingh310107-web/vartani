@@ -6,6 +6,8 @@ function ModelGate({ meta, report }) {
   const gate = scoreGate(meta?.config, report, meta?.status);
   if (!gate) return <span className="muted">No release gate set</span>;
   if (gate.status === "pending") return <span className="status queued">Gate waiting for report</span>;
+  const sample = gate.checks.find((c) => c.label === "Scored questions");
+  if (!sample.pass) return <span className="status failed">Gate failed · {sample.actual ?? 0}/{sample.target} scored</span>;
   return <span className={`status ${gate.status === "pass" ? "done" : "failed"}`}>{gate.status === "pass" ? "Gate passed" : "Gate failed"}</span>;
 }
 
@@ -40,7 +42,7 @@ export default function ComparePage({ ids, nav }) {
         <tbody>{runs.map(({ id, meta, report }) => <tr key={id}>
           <td><b>{meta.model_label}</b><small className="table-sub">{meta.n_items} items</small></td>
           <td><span className={`status ${meta.status}`}>{meta.status}</span></td>
-          <td>{report?.accuracy?.roman?.acc != null ? `${report.accuracy.roman.acc}%` : "—"}</td>
+          <td>{report?.accuracy?.roman?.acc != null ? `${report.accuracy.roman.acc}% (${report.accuracy.roman.n} scored)` : "—"}</td>
           <td>{report?.stability?.single_flip_rate != null ? `${report.stability.single_flip_rate}%` : "—"}</td>
           <td>{report?.bridge_gain?.effect != null ? `${report.bridge_gain.effect > 0 ? "+" : ""}${report.bridge_gain.effect} pts` : "—"}</td>
           <td><ModelGate meta={meta} report={report} /></td>
