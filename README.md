@@ -26,6 +26,15 @@ python main.py
 First run creates `.venv` and installs six small packages (~1 min). Needs Python 3.10+. **No Node.js** (the UI is pre-built).
 Then open the address it prints → **Test lab**: pick a test set, connect a model, run.
 
+### Find a model and try a fix
+
+1. Open **Compare & ship** and upload a question set with answer keys. A starter set is available for a quick demo.
+2. Use one Groq key to compare GPT-OSS 20B and 120B, or use two or three saved models. Preview the question and request counts before starting. Hosted models receive the selected prompts and may charge for usage. The key entered for the Groq comparison is used for that run and is not saved in model settings.
+3. Compare the best model on Roman input with the best model and conversion workflow. Every model gets the same sampled questions and spelling conditions. The comparison scores each question equally across its original and distinct respelled inputs. Missing answers count as incorrect. Larger sets are sampled reproducibly across the included languages.
+4. When conversion helps, review the before and after examples and use **Try native-script conversion** on new input. It uses the same local converter measured by the comparison. Check its output before sending it to the selected model. When conversion fails to beat the best raw score, keep Roman input for the trial and use a separate dataset to confirm the model choice.
+
+The detailed report for a completed run also suggests a next step from its measured results. Guided scores describe the supplied sample and generated spelling conditions. Use new questions and real user spellings to verify the recommendation before changing a live workflow.
+
 Models (nothing is simulated — there is no demo mode):
 | Option | Needs |
 |---|---|

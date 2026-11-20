@@ -26,9 +26,10 @@ def _dir(rid: str):
 
 def _save_meta(meta: dict):
     clean = redact_secrets(meta)
-    meta.clear()
-    meta.update(clean)
-    (_dir(meta["id"]) / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    path = _dir(meta["id"]) / "meta.json"
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
+    temp.replace(path)
 
 
 def _read_meta(path) -> dict:
@@ -82,8 +83,8 @@ def create_run(name: str, items: List[dict], model: dict, cfg: dict) -> dict:
     rid = uuid.uuid4().hex[:10]
     _dir(rid).mkdir(parents=True, exist_ok=True)
     (_dir(rid) / "items.json").write_text(json.dumps(prepared, ensure_ascii=False), encoding="utf-8")
-    meta = {"id": rid, "name": name, "created": time.time(), "status": "queued", "model": {k: v for k, v in model.items() if k != "api_key"},
-            "model_label": model.get("label") or model.get("model") or model.get("hf_id"), "config": cfg, "n_items": len(items),
+    meta = {"id": rid, "name": name, "created": time.time(), "status": "queued", "model": redact_secrets(model),
+            "model_label": model.get("label") or model.get("model") or model.get("hf_id"), "config": redact_secrets(cfg), "n_items": len(items),
             "total_calls": count_calls(prepared), "done_calls": 0, "done_items": 0, "error": None, "kind": "run"}
     _save_meta(meta)
     _jobs[rid] = meta
@@ -167,10 +168,12 @@ def _execute(rid: str, model: dict):
         with ThreadPoolExecutor(workers) as ex:
             list(ex.map(work, todo))
         meta["status"] = "cancelled" if stop.is_set() else "done"
-    except BackendError as e:
-        meta.update(status="failed", error=str(e))
     except Exception as e:  # noqa: BLE001  - surface anything to the UI instead of dying silently
-        meta.update(status="failed", error=f"{type(e).__name__}: {e}")
+        message = str(e) if isinstance(e, BackendError) else f"{type(e).__name__}: {e}"
+        for field in ("api_key", "hf_token"):
+            if model.get(field):
+                message = message.replace(str(model[field]), "[credential hidden]")
+        meta.update(status="failed", error=message)
     finally:
         try:
             out.close()

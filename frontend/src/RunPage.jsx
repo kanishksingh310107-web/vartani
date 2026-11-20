@@ -3,6 +3,29 @@ import { api } from "./api.js";
 import { ReportBody } from "./Report.jsx";
 import { scoreGate } from "./releaseGate.js";
 
+function NextStep({ report, guidedBatch }) {
+  const gain = report.bridge_gain;
+  const script = report.script_gap;
+  let advice;
+  if (gain?.effect > 0) {
+    advice = `Native-script conversion raised accuracy by ${gain.effect} points across ${gain.n} paired questions. It corrected ${gain.only_a} answers and worsened ${gain.only_b}. Try the converter and check the gain on fresh examples before changing how you send inputs.`;
+  } else if (gain) {
+    advice = `Keep the Roman input for now. Conversion changed accuracy by ${gain.effect} points on ${gain.n} paired questions. Try a different model on the same dataset and compare both workflows.`;
+  } else {
+    advice = "Run a guided comparison with answer keys to measure whether switching models or converting inputs improves accuracy.";
+  }
+  return <section className="card">
+    <h3>What to do next</h3>
+    <p>{advice}</p>
+    {script?.effect > 0 && !(gain?.effect > 0) && <p>If users can supply native text directly, try that option. The original native text scored {script.effect} points higher on {script.n} paired questions.</p>}
+    {guidedBatch && <p className="muted">These figures cover the original Roman inputs. The guided results also measure conversion on changed spellings.</p>}
+    <div className="row gap wrap">
+      <a className="btn primary" href="/features.html#guided">Compare models and input fixes</a>
+      <a className="btn" href="/features.html#fix-input">Try the text converter</a>
+    </div>
+  </section>;
+}
+
 export default function RunPage({ id, nav, lab }) {
   const [meta, setMeta] = useState(null);
   const [rep, setRep] = useState(null);
@@ -49,7 +72,8 @@ export default function RunPage({ id, nav, lab }) {
           {running && <button className="btn" disabled={stopRequested} onClick={stop}>{stopRequested ? "Stopping after current call…" : "Stop test"}</button>}
           {running && !stopRequested && <p className="muted">Stopping keeps completed results. The model call already in progress will finish first.</p>}
           {meta.error && <p className="err-line">{meta.error}</p>}
-          {!running && meta.status !== "done" && <div className="row gap"><button className="btn primary" disabled={!lab.modelId} onClick={resume}>Resume with selected model</button><span className="muted">Finished items are kept; only the rest is run.</span></div>}
+          {!running && meta.config?.guided_batch && <a className="btn" href="/features.html#guided">Start a fresh comparison</a>}
+          {!running && !meta.config?.guided_batch && <div className="row gap"><button className="btn primary" disabled={!lab.modelId} onClick={resume}>Resume with selected model</button><span className="muted">Finished items are kept; only the rest is run.</span></div>}
         </section>
       )}
       {gate && <section className={`card release-gate ${gate.status}`}>
@@ -58,6 +82,7 @@ export default function RunPage({ id, nav, lab }) {
         <div className="gate-checks">{gate.checks.map((c) => <div key={c.label}><b className={c.pass ? "ok" : gate.status === "pending" ? "muted" : "bad"}>{c.pass ? "✓" : gate.status === "pending" ? "…" : "×"}</b> {c.label}: {c.actual == null ? "not available" : `${c.actual}${c.label === "Scored questions" ? "" : "%"}`} (target {c.op} {c.target}{c.label === "Scored questions" ? "" : "%"})</div>)}</div>
         <p className="muted">This is a configurable project check, not a universal definition of model quality.</p>
       </section>}
+      {meta.status === "done" && rep?.n_items > 0 && <NextStep report={rep} guidedBatch={meta.config?.guided_batch} />}
       {rep && rep.n_items > 0 ? <ReportBody rep={rep} runId={id} /> : running && <p className="muted">The report appears as soon as the first item finishes.</p>}
     </div>
   );

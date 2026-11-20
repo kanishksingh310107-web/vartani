@@ -76,7 +76,9 @@ class OpenAICompat:
     def __init__(self, base_url: str, model: str, api_key: str = "", timeout: float = 120.0):
         self.base = base_url.rstrip("/")
         self.model, self.key, self.timeout = model, api_key, timeout
-        self._logprobs_ok = True
+        self._groq_reasoning = self.base == "https://api.groq.com/openai/v1" and self.model in {
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b"}
+        self._logprobs_ok = not self._groq_reasoning
         self.parallel = True
 
     def _post(self, body: dict) -> dict:
@@ -124,6 +126,9 @@ class OpenAICompat:
         started = time.time()
         body = {"model": self.model, "messages": [{"role": "user", "content": format_prompt(t)}],
                 "temperature": 0, "max_tokens": 8}
+        if self._groq_reasoning:
+            body.pop("max_tokens")
+            body.update(reasoning_effort="low", max_completion_tokens=600)
         if self._logprobs_ok:
             body.update(logprobs=True, top_logprobs=20)
         try:
@@ -142,6 +147,8 @@ class OpenAICompat:
         choice = (data.get("choices") or [{}])[0]
         text = (choice.get("message") or {}).get("content") or ""
         letter = parse_letter(text)
+        if letter is None and self._groq_reasoning:
+            return Answer(None, raw=text[:200], ms=int((time.time() - started) * 1000))
         if letter is None:                           # chatty / reasoning model: give it room, then take the last letter
             body.pop("logprobs", None); body.pop("top_logprobs", None); body["max_tokens"] = 600
             text = ((self._post(body).get("choices") or [{}])[0].get("message") or {}).get("content") or ""

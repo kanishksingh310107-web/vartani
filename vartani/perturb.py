@@ -167,6 +167,13 @@ def build_conditions(item: dict, cfg: Optional[dict] = None) -> dict:
         conds["typo"] = map_fields(base, lambda x, i: inject_typos(x, c["typo_rate"], f"{tag}|{i}"))
     if c["bridge"]:
         conds["bridge"] = map_fields(base, lambda x, i: bridge(x, lang))
+        if c.get("bridge_variants"):
+            seen_variants = {tuple(fields(base))}
+            for name, variant in list(conds.items()):
+                if not name.startswith("var") or tuple(fields(variant)) in seen_variants:
+                    continue
+                seen_variants.add(tuple(fields(variant)))
+                conds[f"bridge_{name}"] = map_fields(variant, lambda x, i: bridge(x, lang))
     # Optional speech-to-text check. The supplied audio transcript replaces
     # only the question; passage and answer choices stay identical to baseline.
     spoken = str(item.get("speech_text") or "").strip()

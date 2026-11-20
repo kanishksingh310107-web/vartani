@@ -1,6 +1,8 @@
 """HTTP API + static web UI."""
 from __future__ import annotations
 import json
+from fractions import Fraction
+import re
 import time
 import uuid
 from pathlib import Path
@@ -10,7 +12,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, datasets, evidence as ev, export, models, runner, suites
+from . import __version__, datasets, evidence as ev, export, guided, models, runner, suites
 from .analysis import report
 from .backends import BackendError, PROBE, make_backend, torch_status
 from .config import DATA_DIR, WEB_DIR
@@ -114,7 +116,109 @@ def remove_suite(sid: str):
 
 @app.post("/api/bridge")
 def bridge_text(body: dict = Body(...)):
-    return {"native": bridge(body["text"], body["lang"]), "script": script_of(body["text"])}
+    text, lang = body.get("text"), body.get("lang")
+    if not isinstance(text, str) or len(text) > 20000 or not isinstance(lang, str) or lang not in LANG_INFO:
+        raise HTTPException(400, "Choose Hindi, Bengali, or Tamil and enter up to 20,000 characters.")
+    return {"native": bridge(text, lang), "script": script_of(text)}
+
+
+def _guided_plan(body):
+    try:
+        return guided.prepare(body.get("items"), body.get("limit", 20))
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
+        raise HTTPException(400, f"Could not prepare the comparison. {error}") from error
+
+
+@app.post("/api/guided/plan")
+def guided_plan(body: dict = Body(...)):
+    return _guided_plan(body)[1]
+
+
+@app.post("/api/guided/start")
+def guided_start(body: dict = Body(...)):
+    selected, plan = _guided_plan(body)
+    key = body.get("groq_key")
+    if key is not None:
+        if not isinstance(key, str) or not 1 <= len(key.strip()) <= 512 or "\r" in key or "\n" in key:
+            raise HTTPException(400, "Enter a valid Groq API key.")
+        import httpx
+        try:
+            response = httpx.get(guided.GROQ_URL + "/models",
+                                 headers={"Authorization": "Bearer " + key.strip()}, timeout=12)
+            if response.status_code in (401, 403):
+                raise HTTPException(400, "Groq rejected this API key. Check it and try again.")
+            response.raise_for_status()
+            available = {m["id"] for m in response.json()["data"]}
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+            raise HTTPException(502, "Could not check Groq models. Check your internet connection and try again.") from error
+        configs = [{"kind": "openai", "base_url": guided.GROQ_URL, "model": model,
+                    "label": label, "api_key": key.strip()}
+                   for model, label in guided.GROQ_MODELS.items() if model in available]
+        if len(configs) < 2:
+            raise HTTPException(400, "This Groq account does not have access to both starter models. Try saved models instead.")
+    else:
+        ids = body.get("model_ids")
+        if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids) or not 2 <= len(set(ids)) == len(ids) <= 3:
+            raise HTTPException(400, "Choose two or three saved models.")
+        try:
+            configs = [models.get_model(i) for i in ids]
+        except KeyError as error:
+            raise HTTPException(400, "A saved model was removed. Reload and select models again.") from error
+        identities = {(m.get("kind"), m.get("base_url", "").rstrip("/"), m.get("model"), m.get("hf_id"))
+                      for m in configs}
+        if len(identities) != len(configs):
+            raise HTTPException(400, "Choose different models. Two of the selected connections point to the same model.")
+    batch = uuid.uuid4().hex
+    cfg = {**guided.CONFIG, "guided_batch": batch, "guided_size": len(configs), "guided_plan": plan}
+    runs = []
+    try:
+        for model in configs:
+            label = model.get("label") or model.get("model") or model.get("hf_id")
+            runs.append(runner.create_run(f"Guided comparison · {label}", selected, model, cfg))
+    except (ValueError, OSError) as error:
+        for run in runs:
+            runner.cancel_run(run["id"])
+        raise HTTPException(500, "Could not start the full comparison. Check local storage and try again.") from error
+    return {"ids": [r["id"] for r in runs]}
+
+
+@app.get("/api/guided/results")
+def guided_results(ids: str):
+    run_ids = ids.split(",")
+    if not 2 <= len(set(run_ids)) == len(run_ids) <= 3 or any(
+            not re.fullmatch(r"[a-f0-9]{10}", rid) for rid in run_ids):
+        raise HTTPException(400, "Choose a valid guided comparison.")
+    metas = [runner.get_meta(rid) for rid in run_ids]
+    if any(m is None for m in metas):
+        raise HTTPException(404, "A run is missing. Start a new comparison.")
+    batches = {m["config"].get("guided_batch") for m in metas}
+    if None in batches or len(batches) != 1 or metas[0]["config"].get("guided_size") != len(metas):
+        raise HTTPException(400, "These runs are not from the same guided comparison.")
+    entries = []
+    for rid, meta in zip(run_ids, metas):
+        status = meta["status"]
+        scores = guided.evaluate(runner.load_items(rid), runner.load_rows(rid)) if status == "done" else None
+        # Backend errors can contain provider response text. Keep setup keys out of this public summary.
+        detail = "Open the detailed report for the connection error." if status == "failed" else None
+        entries.append({"id": rid, "label": meta["model_label"], "status": status,
+                        "done": meta["done_items"], "total": meta["n_items"], "scores": scores, "detail": detail})
+    complete = [e for e in entries if e["scores"]]
+    finished = all(e["status"] not in ("queued", "running") for e in entries)
+
+    def leaders(metric):
+        if len(complete) < 2 or not finished:
+            return []
+        best = max(Fraction(e["scores"][metric]) for e in complete)
+        return [e["id"] for e in complete if Fraction(e["scores"][metric]) == best]
+
+    raw_leaders = leaders("raw_rank")
+    converted_leaders = leaders("converted_rank")
+    conversion_beats_raw = bool(raw_leaders and
+        max(Fraction(e["scores"]["converted_rank"]) for e in complete) >
+        max(Fraction(e["scores"]["raw_rank"]) for e in complete))
+    return {"entries": entries, "finished": finished, "plan": metas[0]["config"]["guided_plan"],
+            "raw_leaders": raw_leaders, "converted_leaders": converted_leaders,
+            "conversion_beats_raw": conversion_beats_raw}
 
 
 # ---- models ------------------------------------------------------------------------------------------------
@@ -203,6 +307,9 @@ def run_cancel(rid: str):
 
 @app.post("/api/runs/{rid}/resume")
 def run_resume(rid: str, body: dict = Body(...)):
+    meta = runner.get_meta(rid)
+    if meta and meta["config"].get("guided_batch"):
+        raise HTTPException(400, "Start a new comparison to keep each model's results comparable.")
     try:
         return runner.resume_run(rid, models.get_model(body["model_id"]))
     except (KeyError, ValueError) as e:

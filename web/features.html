@@ -5,24 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Compare & ship · Vartani</title>
   <link rel="stylesheet" href="/features.css" />
+  <style>
+    textarea { width: 100%; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: #151626; color: var(--ink); font: inherit; resize: vertical; }
+    .case-example { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+    #guided, #fix-input { scroll-margin-top: 1rem; }
+  </style>
 </head>
 <body>
   <main class="app feature-app">
     <nav class="nav"><a class="brand" href="/"><span class="logo">व</span>Vartani</a><div class="links"><a href="/">Overview</a><a href="/#/lab">Test lab</a><a class="on" href="/features.html">Compare &amp; ship</a><a href="/#/runs">Runs</a></div></nav>
     <header class="hero feature-hero">
-      <span class="eyebrow">Before you ship</span>
-      <h1>Test the same questions on every model you’re considering.</h1>
-      <p>Compare accuracy and spelling stability, apply your release limits, and see which writer-style spelling patterns move each model’s answers.</p>
+      <h1>Find a model for your dataset</h1>
+      <p>Upload your questions to compare models and see whether converting Roman input to native script improves their answers.</p>
     </header>
-    <section class="card feature-intro">
-      <h3>Three upgrades for real model decisions</h3>
-      <div class="three">
-        <p><b>Side-by-side model comparison</b><br />Every selected model gets the same dataset and spelling conditions.</p>
-        <p><b>Release gate</b><br />Choose a minimum Roman accuracy and a maximum spelling flip rate.</p>
-        <p><b>Reusable benchmark suites</b><br />Save a test set and run it again when a model changes.</p>
-        <p><b>Spelling fingerprint</b><br />See writer-style patterns linked to harmful answer changes and recoveries.</p>
-      </div>
-    </section>
     <section class="card feature-form">
       <h3>1. Choose your questions</h3>
       <div class="grid2">
@@ -32,19 +27,57 @@
       </div>
       <p id="dataset-state" class="muted">Choose a starter set or upload your test questions. The starter sets are examples, not large evaluation benchmarks.</p>
     </section>
+    <section class="card feature-form" id="guided">
+      <h3>2. Get a model recommendation</h3>
+      <div class="grid2">
+        <label>Models<select id="guided-mode">
+          <option value="groq">Two starter models with one Groq key</option>
+          <option value="saved">Use my saved models</option>
+        </select></label>
+        <label>Maximum scored questions per model<select id="guided-limit">
+          <option value="6">6 · quick demo</option>
+          <option value="20" selected>20 · trial</option>
+          <option value="50">50 · larger trial</option>
+          <option value="100">100</option>
+        </select></label>
+      </div>
+      <div id="guided-credential">
+        <label>Groq API key<input id="guided-key" type="password" maxlength="512" autocomplete="off" /></label>
+        <small class="muted">Use a <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq API key</a> to compare GPT-OSS 20B and 120B. Vartani uses the key for this comparison only.</small>
+      </div>
+      <p id="guided-saved-note" class="muted" hidden>Vartani uses up to three distinct saved models automatically. You can choose specific models or open the Test lab in <a href="#saved-models">saved model settings</a>.</p>
+      <div class="row gap wrap">
+        <button id="guided-plan" class="btn primary" disabled>Preview comparison</button>
+        <button id="guided-start" class="btn primary" hidden>Start comparison</button>
+        <button id="guided-stop" class="btn" hidden>Stop comparison</button>
+      </div>
+      <p id="guided-message" class="muted" role="status">Load questions with answer keys to get started.</p>
+      <div id="guided-results" hidden></div>
+    </section>
+    <section class="card feature-form" id="fix-input">
+      <h3>Try native-script conversion</h3>
+      <p class="muted" id="fix-note">Convert Roman text locally, then check the wording before sending it to a model.</p>
+      <div class="grid2">
+        <label>Language<select id="fix-language"><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option></select></label>
+        <div class="row gap suite-actions"><button id="fix-convert" class="btn">Convert text</button></div>
+        <label>Roman input<textarea id="fix-text" rows="4" maxlength="20000"></textarea></label>
+        <label>Native output<textarea id="fix-output" rows="4" readonly></textarea></label>
+      </div>
+      <p id="fix-message" class="muted" role="status"></p>
+    </section>
     <section class="card feature-form">
       <h3>Keep this test set for later</h3>
       <div class="row gap wrap"><label class="suite-name">Suite name<input id="suite-name" value="My release benchmark" /></label><button id="save-suite" class="btn" disabled>Save reusable suite</button></div>
       <div class="grid2"><label>Saved suites<select id="suite-select"><option value="">Choose a saved test set</option></select></label><div class="row gap wrap suite-actions"><button id="load-suite" class="btn" disabled>Load selected suite</button><button id="delete-suite" class="btn" disabled>Delete selected suite</button></div></div>
       <p id="suite-state" class="muted">Saved suites stay on this computer and can be reused after you restart Vartani.</p>
     </section>
-    <section class="card feature-form">
-      <h3>2. Select saved models</h3>
+    <section class="card feature-form" id="saved-models">
+      <h3>Saved models</h3>
       <p class="muted">Connect models in the Test lab first. API keys stay in Vartani’s local model settings.</p>
       <div id="models" class="model-list"><p class="muted">Loading saved models…</p></div>
     </section>
     <section class="card feature-form">
-      <h3>3. Set your release limits</h3>
+      <h3>Advanced comparison with release limits</h3>
       <div class="grid2 gate-fields">
         <label>Minimum Roman accuracy (%)<input id="min-accuracy" type="number" min="0" max="100" value="60" /></label>
         <label>Maximum single-respelling answer flips (%)<input id="max-flips" type="number" min="0" max="100" value="20" /></label>
@@ -60,6 +93,7 @@
     </section>
     <footer>Vartani measures how model answers respond to spelling changes. It does not certify answer correctness outside the supplied answer key.</footer>
   </main>
-  <script src="/features.js"></script>
+  <script src="/features.js?v=2"></script>
+  <script src="/guided.js?v=1"></script>
 </body>
 </html>

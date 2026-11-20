@@ -27,6 +27,7 @@ function datasetReady(description) {
   $("dataset-state").textContent = description;
   $("run").disabled = !items.length || savedModels.filter((m) => document.querySelector(`[data-model="${m.id}"]`)?.checked).length < 2;
   $("save-suite").disabled = !items.length;
+  window.dispatchEvent(new Event("guided-input-change"));
 }
 
 function showError(error) { $("message").textContent = error.message || String(error); $("message").className = "err-line"; }
